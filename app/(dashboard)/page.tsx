@@ -1,8 +1,17 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
 import { ArrowRight, CreditCard, Database } from 'lucide-react';
 import { Terminal } from './terminal';
+import { useChat } from '@ai-sdk/react';
+import { useRef, useState } from 'react';
+import Image from 'next/image';
 
 export default function HomePage() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({maxSteps: 5});
+
+  const [files, setFiles] = useState<FileList | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   return (
     <main>
       <section className="py-20">
@@ -98,31 +107,82 @@ export default function HomePage() {
       </section>
 
       <section className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
-                Ready to launch your SaaS?
-              </h2>
-              <p className="mt-3 max-w-3xl text-lg text-gray-500">
-                Our template provides everything you need to get your SaaS up
-                and running quickly. Don't waste time on boilerplate - focus on
-                what makes your product unique.
+        <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
+          {messages.map(m => (
+            <div key={m.id} className="whitespace-pre-wrap">
+              {m.role === 'user' ? 'User: ' : 'AI: '}
+              <p>
+                {m.content.length > 0 ? (
+                  m.content
+                ) : (
+                  <span className="italic font-light">
+                    {'calling tool: ' + m?.toolInvocations?.[0].toolName}
+                  </span>
+                )}
               </p>
+              <div>
+                {m?.experimental_attachments
+                ?.filter(
+                  attachment =>
+                    attachment?.contentType?.startsWith('image/') ||
+                    attachment?.contentType?.startsWith('application/pdf'),
+                )
+                .map((attachment, index) =>
+                  attachment.contentType?.startsWith('image/') ? (
+                    <Image
+                      key={`${m.id}-${index}`}
+                      src={attachment.url}
+                      width={500}
+                      height={500}
+                      alt={attachment.name ?? `attachment-${index}`}
+                    />
+                  ) : attachment.contentType?.startsWith('application/pdf') ? (
+                    <iframe
+                      key={`${m.id}-${index}`}
+                      src={attachment.url}
+                      width={500}
+                      height={600}
+                      title={attachment.name ?? `attachment-${index}`}
+                    />
+                  ) : null,
+                )}
+              </div>
             </div>
-            <div className="mt-8 lg:mt-0 flex justify-center lg:justify-end">
-              <a href="https://github.com/nextjs/saas-starter" target="_blank">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="text-lg rounded-full"
-                >
-                  View the code
-                  <ArrowRight className="ml-3 h-6 w-6" />
-                </Button>
-              </a>
-            </div>
-          </div>
+          ))}
+
+          <form
+            onSubmit={event => {
+              handleSubmit(event, {
+                experimental_attachments: files,
+              });
+
+              setFiles(undefined);
+
+              if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+              }
+            }}
+            
+            className="fixed bottom-0 w-full max-w-md mb-8 border border-gray-300 rounded shadow-xl"
+          >
+            <input
+              type="file"
+              className=""
+              onChange={event => {
+                if (event.target.files) {
+                  setFiles(event.target.files);
+                }
+              }}
+              multiple
+              ref={fileInputRef}
+            />
+            <input
+              className="w-full p-2"
+              value={input}
+              placeholder="Say something..."
+              onChange={handleInputChange}
+            />
+          </form>
         </div>
       </section>
     </main>
