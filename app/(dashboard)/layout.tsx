@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { use, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
-import { CircleIcon, Home, LogOut } from 'lucide-react';
+import { ShoppingCart, Home, MessageCircle, LogOut } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,6 +65,12 @@ function UserMenu() {
             <span>Dashboard</span>
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer">
+          <Link href="/chat" className="flex w-full items-center">
+            <MessageCircle className="mr-2 h-4 w-4" />
+            <span>Chat with Guru</span>
+          </Link>
+        </DropdownMenuItem>
         <form action={handleSignOut} className="w-full">
           <button type="submit" className="flex w-full">
             <DropdownMenuItem className="w-full flex-1 cursor-pointer">
@@ -83,10 +89,17 @@ function Header() {
     <header className="border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         <Link href="/" className="flex items-center">
-          <CircleIcon className="h-6 w-6 text-orange-500" />
-          <span className="ml-2 text-xl font-semibold text-gray-900">ACME</span>
+          <ShoppingCart className="h-6 w-6 text-orange-500" />
+          <span className="ml-2 text-xl font-semibold text-gray-900">Groceries Guru</span>
         </Link>
         <div className="flex items-center space-x-4">
+          <Link 
+            href="/chat"
+            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-orange-500 transition-colors"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Chat with Guru
+          </Link>
           <Suspense fallback={<div className="h-9" />}>
             <UserMenu />
           </Suspense>
