@@ -26,10 +26,17 @@ export default function ChatPage() {
   const [useSimpleChat, setUseSimpleChat] = useState(false);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
-    maxSteps: 5,
+    key: useSimpleChat ? 'simple-chat' : 'full-chat', // Force re-initialization
     api: useSimpleChat ? '/api/chat-simple' : '/api/chat',
+    ...(useSimpleChat ? {} : { maxSteps: 5 }),
     onError: (error) => {
       console.error('Chat error:', error);
+    },
+    onFinish: (message) => {
+      console.log('Chat finished:', message);
+    },
+    onResponse: (response) => {
+      console.log('Chat response received:', response.status, response.url);
     }
   });
 
@@ -189,7 +196,11 @@ export default function ChatPage() {
                 <label className="text-sm text-gray-600">Chat Mode:</label>
                 <select
                   value={useSimpleChat ? 'simple' : 'full'}
-                  onChange={(e) => setUseSimpleChat(e.target.value === 'simple')}
+                  onChange={(e) => {
+                    const newValue = e.target.value === 'simple';
+                    console.log('Changing chat mode to:', e.target.value, 'useSimpleChat will be:', newValue);
+                    setUseSimpleChat(newValue);
+                  }}
                   className="text-xs border border-gray-300 rounded px-2 py-1"
                 >
                   <option value="full">Full (with tools)</option>
@@ -308,7 +319,12 @@ export default function ChatPage() {
                       <div className="flex items-center gap-2 text-gray-500">
                         <div className="animate-spin h-4 w-4 border-2 border-gray-300 border-t-orange-500 rounded-full"></div>
                         <span className="italic">
-                          {message?.toolInvocations?.[0]?.toolName === 'getInformation' ? 'Searching knowledge base...' : 'Searching web...'}
+                          {useSimpleChat 
+                            ? 'Thinking...' 
+                            : message?.toolInvocations?.[0]?.toolName === 'getInformation' 
+                              ? 'Searching knowledge base...' 
+                              : 'Searching web...'
+                          }
                         </span>
                       </div>
                     )}
@@ -365,6 +381,8 @@ export default function ChatPage() {
           <div className="border-t border-gray-200 p-4">
             <form
               onSubmit={(event) => {
+                console.log('Form submitted, useSimpleChat:', useSimpleChat);
+                console.log('API endpoint:', useSimpleChat ? '/api/chat-simple' : '/api/chat');
                 handleSubmit(event, {
                   experimental_attachments: files,
                 });

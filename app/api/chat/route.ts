@@ -12,7 +12,9 @@ export const maxDuration = 30;
 export async function POST(req: Request) {
   try {
     console.log('Chat API: Received request');
-    const { messages }: { messages: Message[] } = await req.json();
+    const body = await req.json();
+    console.log('Full request body:', JSON.stringify(body, null, 2));
+    const { messages }: { messages: Message[] } = body;
     console.log('Chat API: Messages received:', messages.length);
 
   // check if user has sent a PDF

@@ -1,46 +1,53 @@
 import { openai } from '@ai-sdk/openai';
-import { streamText, Message } from 'ai';
+import { streamText } from 'ai';
 
-// Simple chat without tools for debugging
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
+  console.log('Simple Chat: Request received');
+  
   try {
-    console.log('Simple Chat API: Received request');
-    const { messages }: { messages: Message[] } = await req.json();
-    console.log('Simple Chat API: Messages:', messages.length);
-
+    const { messages } = await req.json();
+    console.log('Simple Chat: Messages:', messages?.length);
+    
     if (!messages || messages.length === 0) {
-      throw new Error('No messages provided');
+      return new Response('No messages', { status: 400 });
     }
 
+    console.log('Simple Chat: Calling OpenAI...');
+    
     const result = streamText({
       model: openai('gpt-4o-mini'),
-      system: `You are Groceries Guru, a friendly AI assistant that helps with grocery shopping. 
-      
-      Provide helpful advice about:
-      - Product recommendations
-      - Nutritional information
-      - Shopping tips
-      - Dietary alternatives
-      
-      Keep responses concise and helpful. Always suggest 2-3 specific products when relevant.`,
       messages,
+      system: 'You are a helpful grocery shopping assistant. Keep responses short and helpful.',
     });
 
-    console.log('Simple Chat API: Streaming response started');
+    console.log('Simple Chat: Returning stream response');
     return result.toDataStreamResponse();
     
-  } catch (error) {
-    console.error('Simple Chat API Error:', error);
+  } catch (error: any) {
+    console.error('Simple Chat Error Details:', {
+      name: error?.name,
+      message: error?.message,
+      status: error?.status,
+      code: error?.code,
+      type: error?.type,
+      full: error
+    });
+    
+    // Return detailed error information
+    const errorMessage = error?.status === 429 
+      ? 'OpenAI API quota exceeded. Please check your billing and usage limits.'
+      : error?.message || 'Unknown error occurred';
+      
     return new Response(
-      JSON.stringify({
-        error: 'Chat API error',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
+      JSON.stringify({ 
+        error: errorMessage,
+        status: error?.status,
+        type: error?.type || 'unknown'
       }),
-      {
-        status: 500,
+      { 
+        status: error?.status || 500,
         headers: { 'Content-Type': 'application/json' }
       }
     );
