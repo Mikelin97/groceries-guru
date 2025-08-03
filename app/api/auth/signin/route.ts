@@ -5,17 +5,28 @@ import { comparePasswords, setSession } from '@/lib/auth/session';
 import { eq, and, isNull } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
+  console.log('=== SIGNIN API: Request received ===');
+  console.log('User-Agent:', request.headers.get('user-agent'));
+  console.log('Host:', request.headers.get('host'));
+  console.log('Origin:', request.headers.get('origin'));
+  
   try {
-    const { email, password } = await request.json();
+    const body = await request.json();
+    console.log('Request body received:', { email: body.email ? 'present' : 'missing', password: body.password ? 'present' : 'missing' });
+    
+    const { email, password } = body;
 
     // Validate input
     if (!email || !password) {
+      console.log('Validation failed: missing email or password');
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
       );
     }
 
+    console.log('Looking up user with email:', email.toLowerCase());
+    
     // Find user by email
     const user = await db
       .select()
@@ -23,17 +34,25 @@ export async function POST(request: NextRequest) {
       .where(and(eq(users.email, email.toLowerCase()), isNull(users.deletedAt)))
       .limit(1);
 
+    console.log('User found:', user.length > 0 ? 'yes' : 'no');
+
     if (user.length === 0) {
+      console.log('User not found');
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
 
+    console.log('Verifying password for user:', user[0].id);
+    
     // Verify password
     const isValidPassword = await comparePasswords(password, user[0].passwordHash);
     
+    console.log('Password valid:', isValidPassword);
+    
     if (!isValidPassword) {
+      console.log('Invalid password');
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -49,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     // Log the signin activity
     await db.insert(activityLogs).values({
-      teamId: userTeam[0]?.teamId || null,
+      teamId: userTeam[0]?.teamId || 1, // Default to team 1 if no team found
       userId: user[0].id,
       action: 'SIGN_IN',
       ipAddress: request.headers.get('x-forwarded-for') || 
@@ -57,10 +76,14 @@ export async function POST(request: NextRequest) {
                  'unknown'
     });
 
+    console.log('Setting session for user:', user[0].id);
+    
     // Set session
     await setSession(user[0]);
 
-    return NextResponse.json({
+    console.log('Session set successfully');
+
+    const response = NextResponse.json({
       message: 'Signed in successfully',
       user: {
         id: user[0].id,
@@ -69,6 +92,9 @@ export async function POST(request: NextRequest) {
         role: user[0].role
       }
     }, { status: 200 });
+
+    console.log('=== SIGNIN API: Success response sent ===');
+    return response;
 
   } catch (error) {
     console.error('Signin error:', error);

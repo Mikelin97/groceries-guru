@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { Send, Mic, Camera } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { Send, Mic, Camera, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 
@@ -29,6 +29,14 @@ export const ChatInput = ({
   isRecording
 }: ChatInputProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showVoiceInfo, setShowVoiceInfo] = useState(false);
+  
+  // Check if we're on HTTPS or localhost
+  const isSecureContext = typeof window !== 'undefined' && 
+    (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
+  
+  const isMobile = typeof window !== 'undefined' && 
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
   const handleImageClick = () => {
     fileInputRef.current?.click();
@@ -100,31 +108,61 @@ export const ChatInput = ({
             <Camera className="h-4 w-4" />
           </Button>
           
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={onVoiceToggle}
-            className={`shrink-0 relative ${
-              isRecording 
-                ? 'bg-red-50 border-red-200 animate-pulse' 
-                : isListening 
-                  ? 'bg-blue-50 border-blue-200' 
-                  : ''
-            }`}
-            title={isRecording ? 'Stop recording' : 'Start voice input'}
-          >
-            <Mic className={`h-4 w-4 ${
-              isRecording 
-                ? 'text-red-500' 
-                : isListening 
-                  ? 'text-blue-500' 
-                  : ''
-            }`} />
-            {isListening && (
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-ping"></div>
+          <div className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={isMobile && !isSecureContext ? () => setShowVoiceInfo(true) : onVoiceToggle}
+              className={`shrink-0 relative ${
+                isRecording 
+                  ? 'bg-red-50 border-red-200 animate-pulse' 
+                  : isListening 
+                    ? 'bg-blue-50 border-blue-200' 
+                    : isMobile && !isSecureContext
+                      ? 'bg-yellow-50 border-yellow-200'
+                      : ''
+              }`}
+              title={
+                isMobile && !isSecureContext 
+                  ? 'Voice input requires HTTPS on mobile devices' 
+                  : isRecording 
+                    ? 'Stop recording' 
+                    : 'Start voice input'
+              }
+            >
+              {isMobile && !isSecureContext ? (
+                <Shield className="h-4 w-4 text-yellow-600" />
+              ) : (
+                <Mic className={`h-4 w-4 ${
+                  isRecording 
+                    ? 'text-red-500' 
+                    : isListening 
+                      ? 'text-blue-500' 
+                      : ''
+                }`} />
+              )}
+              {isListening && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-ping"></div>
+              )}
+            </Button>
+            
+            {/* HTTPS info popup */}
+            {showVoiceInfo && (
+              <div className="absolute bottom-full mb-2 right-0 bg-black text-white text-xs rounded-lg p-3 w-64 z-50">
+                <div className="text-yellow-300 font-medium mb-1">Voice input requires HTTPS</div>
+                <div className="mb-2">Mobile browsers require a secure connection (HTTPS) to access the microphone.</div>
+                <div className="text-gray-300">Try accessing via HTTPS or use the desktop version.</div>
+                <button 
+                  onClick={() => setShowVoiceInfo(false)}
+                  className="absolute top-1 right-2 text-gray-400 hover:text-white"
+                >
+                  ×
+                </button>
+                <div className="absolute top-full right-4 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-black"></div>
+              </div>
             )}
-          </Button>
+          </div>
           
           <Button 
             type="submit" 

@@ -44,16 +44,32 @@ export async function getSession() {
 }
 
 export async function setSession(user: NewUser) {
+  console.log('=== SETTING SESSION ===');
+  console.log('User ID:', user.id);
+  console.log('Environment:', process.env.NODE_ENV);
+  console.log('Secure cookie:', process.env.NODE_ENV === 'production');
+  
   const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const session: SessionData = {
     user: { id: user.id! },
     expires: expiresInOneDay.toISOString(),
   };
+  
+  console.log('Session data:', session);
+  
   const encryptedSession = await signToken(session);
-  (await cookies()).set('session', encryptedSession, {
+  console.log('Encrypted session length:', encryptedSession.length);
+  
+  const cookieOptions = {
     expires: expiresInOneDay,
     httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-  });
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+  };
+  
+  console.log('Cookie options:', cookieOptions);
+  
+  (await cookies()).set('session', encryptedSession, cookieOptions);
+  
+  console.log('=== SESSION SET COMPLETE ===');
 }

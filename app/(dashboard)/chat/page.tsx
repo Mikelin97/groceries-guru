@@ -35,7 +35,7 @@ export default function ChatPage() {
   // Voice input functionality
   const { isRecording, isListening, handleVoiceToggle } = useVoiceInput((text) => {
     handleInputChange({ target: { value: text } } as any);
-  });
+  }, input);
 
   // Mock product recommendations for demonstration
   const mockProducts: ProductRecommendation[] = [

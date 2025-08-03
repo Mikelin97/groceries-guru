@@ -45,7 +45,13 @@ export default function SignInPage() {
     setIsLoading(true);
     setError('');
 
+    console.log('=== FRONTEND: Starting signin process ===');
+    console.log('User agent:', navigator.userAgent);
+    console.log('Window location:', window.location.href);
+
     try {
+      console.log('Sending signin request...');
+      
       const response = await fetch('/api/auth/signin', {
         method: 'POST',
         headers: {
@@ -55,18 +61,29 @@ export default function SignInPage() {
           email: formData.email.trim(),
           password: formData.password
         }),
+        credentials: 'include', // Ensure cookies are included
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (response.ok) {
-        router.push('/chat'); // Redirect to chat page after successful signin
+        console.log('Signin successful, redirecting to chat...');
+        
+        // Force a small delay to ensure cookie is set
+        setTimeout(() => {
+          router.push('/chat');
+        }, 100);
       } else {
+        console.log('Signin failed:', data.error);
         setError(data.error || 'Failed to sign in');
       }
     } catch (error) {
+      console.error('Signin network error:', error);
       setError('Network error. Please try again.');
-      console.error('Signin error:', error);
     } finally {
       setIsLoading(false);
     }

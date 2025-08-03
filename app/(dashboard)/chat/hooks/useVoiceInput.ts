@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-export const useVoiceInput = (onTranscript: (text: string) => void) => {
+export const useVoiceInput = (onTranscript: (text: string) => void, currentInput?: string) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -10,8 +10,37 @@ export const useVoiceInput = (onTranscript: (text: string) => void) => {
   const handleVoiceToggle = useCallback(async () => {
     if (!isRecording) {
       // Start recording
+      console.log('=== VOICE INPUT: Starting ===');
+      console.log('User agent:', navigator.userAgent);
+      console.log('Is HTTPS:', location.protocol === 'https:');
+      console.log('MediaDevices available:', !!navigator.mediaDevices);
+      console.log('getUserMedia available:', !!navigator.mediaDevices?.getUserMedia);
+      
+      // Check if we're on HTTP (not HTTPS)
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        alert('Voice input requires HTTPS on mobile devices. Please use HTTPS or localhost.');
+        return;
+      }
+
+      // Check if media devices are supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Voice input is not supported on this device/browser.');
+        return;
+      }
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('Requesting microphone access...');
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        
+        console.log('Microphone access granted');
+        
         const recorder = new MediaRecorder(stream);
         const chunks: Blob[] = [];
 
@@ -26,7 +55,7 @@ export const useVoiceInput = (onTranscript: (text: string) => void) => {
           setAudioChunks([audioBlob]);
           
           // If no speech recognition result, try transcription API
-          if (!onTranscript) {
+          if (!currentInput || currentInput.trim() === '') {
             try {
               const formData = new FormData();
               formData.append('audio', audioBlob, 'recording.wav');
@@ -58,6 +87,8 @@ export const useVoiceInput = (onTranscript: (text: string) => void) => {
 
         // Also try browser speech recognition for real-time transcription
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+          console.log('Speech recognition available, starting...');
+          
           const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
           const recognition = new SpeechRecognition();
           
@@ -81,8 +112,13 @@ export const useVoiceInput = (onTranscript: (text: string) => void) => {
             }
           };
 
-          recognition.onstart = () => setIsListening(true);
+          recognition.onstart = () => {
+            console.log('Speech recognition started');
+            setIsListening(true);
+          };
+          
           recognition.onend = () => {
+            console.log('Speech recognition ended');
             setIsListening(false);
             // Auto-restart if we're still in recording mode for continuous conversation
             if (isRecording) {
@@ -96,13 +132,42 @@ export const useVoiceInput = (onTranscript: (text: string) => void) => {
             }
           };
           
+          recognition.onerror = (event: any) => {
+            console.error('Speech recognition error:', event.error);
+            if (event.error === 'not-allowed') {
+              alert('Microphone permission denied. Please allow microphone access and try again.');
+            }
+          };
+          
           setSpeechRecognition(recognition);
-          recognition.start();
+          
+          try {
+            recognition.start();
+          } catch (error) {
+            console.error('Failed to start speech recognition:', error);
+          }
+        } else {
+          console.log('Speech recognition not available');
         }
 
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error accessing microphone:', error);
-        alert('Unable to access microphone. Please check permissions.');
+        
+        let errorMessage = 'Unable to access microphone. ';
+        
+        if (error.name === 'NotAllowedError') {
+          errorMessage += 'Please allow microphone access in your browser settings and try again.';
+        } else if (error.name === 'NotFoundError') {
+          errorMessage += 'No microphone found on this device.';
+        } else if (error.name === 'NotSupportedError') {
+          errorMessage += 'Microphone access is not supported on this device/browser.';
+        } else if (error.name === 'NotReadableError') {
+          errorMessage += 'Microphone is already in use by another application.';
+        } else {
+          errorMessage += 'Please check your device settings and permissions.';
+        }
+        
+        alert(errorMessage);
       }
     } else {
       // Stop recording
