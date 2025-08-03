@@ -1,26 +1,17 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { useRef, useState } from 'react';
-import { Send, Mic, Camera, ShoppingCart, Star, Clock, DollarSign } from 'lucide-react';
+import { useState } from 'react';
+import { ShoppingCart, Clock, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
-
-interface ProductRecommendation {
-  name: string;
-  brand?: string;
-  price: string;
-  rating: number;
-  reviews: number;
-  highlights: string[];
-  category: string;
-  image?: string;
-}
+import { ChatHeader } from './components/ChatHeader';
+import { ChatInput } from './components/ChatInput';
+import { ProductCard, ProductRecommendation } from './components/ProductCard';
+import { useVoiceInput } from './hooks/useVoiceInput';
 
 export default function ChatPage() {
   const [files, setFiles] = useState<FileList | undefined>(undefined);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isRecording, setIsRecording] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [testResults, setTestResults] = useState<any>(null);
   const [useSimpleChat, setUseSimpleChat] = useState(false);
@@ -38,6 +29,11 @@ export default function ChatPage() {
     onResponse: (response) => {
       console.log('Chat response received:', response.status, response.url);
     }
+  });
+
+  // Voice input functionality
+  const { isRecording, isListening, handleVoiceToggle } = useVoiceInput((text) => {
+    handleInputChange({ target: { value: text } } as any);
   });
 
   // Mock product recommendations for demonstration
@@ -64,13 +60,8 @@ export default function ChatPage() {
     }
   ];
 
-  const handleVoiceToggle = () => {
-    setIsRecording(!isRecording);
-    // Voice recording logic will be implemented later
-  };
-
   const handleImageUpload = () => {
-    fileInputRef.current?.click();
+    // Will be handled by ChatInput component
   };
 
   const testAIFunction = async (query: string, testType: 'milvus' | 'websearch' | 'both') => {
@@ -116,75 +107,10 @@ export default function ChatPage() {
     }
   };
 
-  const ProductCard = ({ product }: { product: ProductRecommendation }) => (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
-      <div className="flex gap-3">
-        <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-          <ShoppingCart className="h-6 w-6 text-gray-400" />
-        </div>
-        <div className="flex-1">
-          <div className="flex justify-between items-start mb-2">
-            <div>
-              <h3 className="font-semibold text-gray-900 text-sm">{product.name}</h3>
-              {product.brand && (
-                <p className="text-xs text-gray-500">{product.brand}</p>
-              )}
-            </div>
-            <div className="text-right">
-              <p className="font-bold text-green-600">{product.price}</p>
-              <p className="text-xs text-gray-500">{product.category}</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2 mb-2">
-            <div className="flex items-center">
-              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-              <span className="text-xs text-gray-600 ml-1">{product.rating}</span>
-            </div>
-            <span className="text-xs text-gray-400">({product.reviews} reviews)</span>
-          </div>
-          
-          <div className="flex flex-wrap gap-1">
-            {product.highlights.map((highlight, index) => (
-              <span
-                key={index}
-                className="text-xs bg-orange-50 text-orange-600 px-2 py-1 rounded-full"
-              >
-                {highlight}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-orange-500 rounded-full p-2">
-                <ShoppingCart className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="font-semibold text-gray-900">Groceries Guru</h1>
-                <p className="text-sm text-gray-500">Your AI Shopping Assistant</p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDebug(!showDebug)}
-              className="text-xs"
-            >
-              {showDebug ? 'Hide' : 'Show'} Debug
-            </Button>
-          </div>
-        </div>
-      </div>
+      <ChatHeader showDebug={showDebug} onToggleDebug={() => setShowDebug(!showDebug)} />
 
       {/* Debug Panel */}
       {showDebug && (
@@ -377,90 +303,26 @@ export default function ChatPage() {
             ))}
           </div>
 
-          {/* Input Area */}
-          <div className="border-t border-gray-200 p-4">
-            <form
-              onSubmit={(event) => {
-                console.log('Form submitted, useSimpleChat:', useSimpleChat);
-                console.log('API endpoint:', useSimpleChat ? '/api/chat-simple' : '/api/chat');
-                handleSubmit(event, {
-                  experimental_attachments: files,
-                });
-                setFiles(undefined);
-                if (fileInputRef.current) {
-                  fileInputRef.current.value = '';
-                }
-              }}
-              className="flex gap-3 items-end"
-            >
-              {/* Hidden file input */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={(event) => {
-                  if (event.target.files) {
-                    setFiles(event.target.files);
-                  }
-                }}
-                multiple
-                accept="image/*,application/pdf"
-                className="hidden"
-              />
-
-              {/* Input field */}
-              <div className="flex-1 relative">
-                <input
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
-                  value={input}
-                  placeholder="Ask about any grocery product..."
-                  onChange={handleInputChange}
-                  disabled={isLoading}
-                />
-                
-                {/* File preview */}
-                {files && files.length > 0 && (
-                  <div className="absolute bottom-full mb-2 flex gap-2">
-                    {Array.from(files).map((file, index) => (
-                      <div key={index} className="bg-orange-50 text-orange-600 text-xs px-2 py-1 rounded">
-                        📎 {file.name}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={handleImageUpload}
-                  className="shrink-0"
-                >
-                  <Camera className="h-4 w-4" />
-                </Button>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={handleVoiceToggle}
-                  className={`shrink-0 ${isRecording ? 'bg-red-50 border-red-200' : ''}`}
-                >
-                  <Mic className={`h-4 w-4 ${isRecording ? 'text-red-500' : ''}`} />
-                </Button>
-                
-                <Button 
-                  type="submit" 
-                  disabled={isLoading || (!input.trim() && !files?.length)}
-                  className="shrink-0"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-            </form>
-          </div>
+          <ChatInput
+            input={input}
+            isLoading={isLoading}
+            isListening={isListening}
+            files={files}
+            onInputChange={handleInputChange}
+            onSubmit={(e) => {
+              console.log('Form submitted, useSimpleChat:', useSimpleChat);
+              console.log('API endpoint:', useSimpleChat ? '/api/chat-simple' : '/api/chat');
+              
+              handleSubmit(e, {
+                experimental_attachments: files,
+              });
+              setFiles(undefined);
+            }}
+            onVoiceToggle={handleVoiceToggle}
+            onImageUpload={handleImageUpload}
+            onFilesChange={setFiles}
+            isRecording={isRecording}
+          />
         </div>
       </div>
     </div>
