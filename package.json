@@ -10,7 +10,10 @@
     "db:seed": "npx tsx lib/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test:ai": "npx tsx test-ai.ts",
+    "test:lint": "next lint",
+    "test": "npm run test:ai"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",

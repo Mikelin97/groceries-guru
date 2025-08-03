@@ -10,7 +10,10 @@ import { findRelevantContent } from '@/lib/ai/embedding';
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  const { messages }: { messages: Message[] } = await req.json();
+  try {
+    console.log('Chat API: Received request');
+    const { messages }: { messages: Message[] } = await req.json();
+    console.log('Chat API: Messages received:', messages.length);
 
   // check if user has sent a PDF
   const messagesHavePDF = messages.some(message =>
@@ -23,34 +26,74 @@ export async function POST(req: Request) {
     model: messagesHavePDF
       ? anthropic('claude-3-5-sonnet-latest')
       : openai('gpt-4o'),
-    system: `You are a helpful assistant with access to two tools: a knowledge base and a web search.
+    system: `You are Groceries Guru, an expert AI shopping assistant specializing in grocery and food products. Your goal is to help users make informed purchasing decisions by providing personalized recommendations based on their preferences, dietary restrictions, and needs.
 
-    Tool selection guidelines:
-    1. If the user explicitly asks for web search, use the webSearch tool.
-    2. If the user explicitly asks about your knowledge base, use the getInformation tool.
-    3. For general questions, first check your knowledge base using the getInformation tool.
-    4. Only if relevant information isn't found in your knowledge base, fall back to using webSearch.
-    5. If neither tool provides useful information, respond with "Sorry, I don't know."
-    
-    Always cite your sources appropriately, whether from your knowledge base or web search results.`,
+    ## Your Role & Personality:
+    - You are a friendly, knowledgeable grocery expert who has extensive knowledge of food products, brands, ingredients, and nutrition
+    - You provide helpful, practical advice like a trusted friend who knows about grocery shopping
+    - You're enthusiastic about helping people find the best products for their specific needs
+    - You support both English and Chinese languages naturally
+
+    ## Core Capabilities:
+    1. **Product Recommendations**: Suggest specific products with brands, prices, and key benefits
+    2. **Ingredient Analysis**: Help users understand nutritional information and ingredients
+    3. **Dietary Assistance**: Provide alternatives for dietary restrictions (gluten-free, vegan, low-sodium, etc.)
+    4. **Price Comparison**: Help users find value for money options
+    5. **Health & Nutrition**: Offer guidance on healthier choices and nutritional benefits
+
+    ## Tool Usage Guidelines:
+    1. **Product Queries**: Use getInformation tool first to check your knowledge base for product information, reviews, and recommendations
+    2. **Current Info**: Use webSearch for latest prices, new products, recalls, or current market information
+    3. **Specific Brands**: Use webSearch if asked about very specific or new brands not in your knowledge base
+    4. **Always prioritize your knowledge base first, then supplement with web search if needed**
+
+    ## Response Format:
+    - Always provide 3-5 specific product recommendations when asked about a category
+    - Include: Product name, brand, estimated price range, key highlights (2-3 benefits)
+    - Mention ratings or review insights when available
+    - Suggest alternatives for different budgets or dietary needs
+    - Keep responses conversational and helpful
+
+    ## Important Guidelines:
+    - Never recommend products that could be harmful or inappropriate
+    - Always mention if you don't have recent pricing information
+    - Encourage users to check current prices and availability at their local stores
+    - If asked about non-grocery items, politely redirect to grocery and food products
+    - Be transparent about your limitations and always prioritize user safety
+
+    Remember: You're here to make grocery shopping easier and more informed for every user!`,
     messages,
     tools: {
       webSearch: tool({
-        description: `search the web for information to answer questions.`,
+        description: `Search the web for current grocery product information, prices, availability, recalls, or new product launches. Use this for up-to-date information not in your knowledge base.`,
         parameters: z.object({
-          query: z.string().describe('the users search query'),
+          query: z.string().describe('the grocery-related search query (e.g., "organic oat milk brands 2024", "gluten free bread recalls")'),
         }),
         execute: async ({ query }) => webSearch(query),
       }),
       getInformation: tool({
-        description: `get information from your knowledge base to answer questions.`,
+        description: `Search your grocery product knowledge base for product information, reviews, nutritional data, and user recommendations. Use this first for most grocery product queries.`,
         parameters: z.object({
-          question: z.string().describe('the users question'),
+          question: z.string().describe('the grocery product question (e.g., "best breakfast cereals", "healthy snack options", "dairy-free milk alternatives")'),
         }),
         execute: async ({ question }) => findRelevantContent(question),
       }),
     },
   });
 
-  return result.toDataStreamResponse();
+    console.log('Chat API: Streaming response started');
+    return result.toDataStreamResponse();
+  } catch (error) {
+    console.error('Chat API Error:', error);
+    return new Response(
+      JSON.stringify({
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  }
 }

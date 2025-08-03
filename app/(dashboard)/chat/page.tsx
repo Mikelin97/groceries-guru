@@ -18,14 +18,20 @@ interface ProductRecommendation {
 }
 
 export default function ChatPage() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    maxSteps: 5,
-    api: '/api/chat'
-  });
-
   const [files, setFiles] = useState<FileList | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [testResults, setTestResults] = useState<any>(null);
+  const [useSimpleChat, setUseSimpleChat] = useState(false);
+
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
+    maxSteps: 5,
+    api: useSimpleChat ? '/api/chat-simple' : '/api/chat',
+    onError: (error) => {
+      console.error('Chat error:', error);
+    }
+  });
 
   // Mock product recommendations for demonstration
   const mockProducts: ProductRecommendation[] = [
@@ -58,6 +64,49 @@ export default function ChatPage() {
 
   const handleImageUpload = () => {
     fileInputRef.current?.click();
+  };
+
+  const testAIFunction = async (query: string, testType: 'milvus' | 'websearch' | 'both') => {
+    try {
+      const response = await fetch('/api/test-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, testType })
+      });
+      
+      const result = await response.json();
+      setTestResults(result);
+      console.log('Test result:', result);
+    } catch (error) {
+      console.error('Test failed:', error);
+      setTestResults({ error: 'Test failed', details: error });
+    }
+  };
+
+  const quickTestQueries = [
+    'healthy breakfast cereals',
+    'gluten free bread',
+    'organic oat milk',
+    'high protein snacks'
+  ];
+
+  const checkHealth = async () => {
+    try {
+      const response = await fetch('/api/health');
+      const result = await response.json();
+      setTestResults({
+        type: 'health_check',
+        ...result
+      });
+      console.log('Health check:', result);
+    } catch (error) {
+      console.error('Health check failed:', error);
+      setTestResults({
+        type: 'health_check',
+        error: 'Health check failed',
+        details: error
+      });
+    }
   };
 
   const ProductCard = ({ product }: { product: ProductRecommendation }) => (
@@ -108,17 +157,113 @@ export default function ChatPage() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-orange-500 rounded-full p-2">
-              <ShoppingCart className="h-5 w-5 text-white" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-orange-500 rounded-full p-2">
+                <ShoppingCart className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="font-semibold text-gray-900">Groceries Guru</h1>
+                <p className="text-sm text-gray-500">Your AI Shopping Assistant</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-semibold text-gray-900">Groceries Guru</h1>
-              <p className="text-sm text-gray-500">Your AI Shopping Assistant</p>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDebug(!showDebug)}
+              className="text-xs"
+            >
+              {showDebug ? 'Hide' : 'Show'} Debug
+            </Button>
           </div>
         </div>
       </div>
+
+      {/* Debug Panel */}
+      {showDebug && (
+        <div className="bg-gray-50 border-b border-gray-200 p-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="font-semibold text-gray-900">AI Function Tests</h2>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Chat Mode:</label>
+                <select
+                  value={useSimpleChat ? 'simple' : 'full'}
+                  onChange={(e) => setUseSimpleChat(e.target.value === 'simple')}
+                  className="text-xs border border-gray-300 rounded px-2 py-1"
+                >
+                  <option value="full">Full (with tools)</option>
+                  <option value="simple">Simple (no tools)</option>
+                </select>
+              </div>
+            </div>
+            
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                <p className="text-red-700 text-sm font-semibold">Chat Error:</p>
+                <p className="text-red-600 text-sm">{error.message}</p>
+                <p className="text-gray-500 text-xs mt-1">Try switching to Simple mode if the error persists</p>
+              </div>
+            )}
+            
+            {/* Health Check */}
+            <div className="mb-4">
+              <Button
+                onClick={checkHealth}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+              >
+                🔍 Check API Health
+              </Button>
+            </div>
+
+            {/* Quick Tests */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Quick Test Queries</h3>
+                <div className="space-y-2">
+                  {quickTestQueries.map((query, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => testAIFunction(query, 'milvus')}
+                        className="text-xs flex-1"
+                      >
+                        KB: {query}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => testAIFunction(query, 'websearch')}
+                        className="text-xs"
+                      >
+                        Web
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Test Results */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Latest Test Result</h3>
+                {testResults ? (
+                  <div className="bg-white border border-gray-200 rounded-lg p-3 text-xs">
+                    <pre className="whitespace-pre-wrap overflow-auto max-h-40">
+                      {JSON.stringify(testResults, null, 2)}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm">No tests run yet</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chat Container */}
       <div className="max-w-4xl mx-auto px-4 py-6">
@@ -191,7 +336,14 @@ export default function ChatPage() {
                   {/* Product Recommendations */}
                   {message.role === 'assistant' && message.content.length > 0 && (
                     <div className="mt-3 space-y-2">
-                      {mockProducts.map((product, index) => (
+                      {/* Show mock products for now - will be replaced with real AI recommendations */}
+                      {message.content.toLowerCase().includes('cereal') && mockProducts.slice(0, 2).map((product, index) => (
+                        <ProductCard key={index} product={product} />
+                      ))}
+                      {message.content.toLowerCase().includes('yogurt') && mockProducts.slice(2, 3).map((product, index) => (
+                        <ProductCard key={index} product={product} />
+                      ))}
+                      {message.content.toLowerCase().includes('milk') && [mockProducts[2]].map((product, index) => (
                         <ProductCard key={index} product={product} />
                       ))}
                     </div>
