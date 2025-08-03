@@ -9,6 +9,7 @@ import { ChatHeader } from './components/ChatHeader';
 import { ChatInput } from './components/ChatInput';
 import { ProductCard, ProductRecommendation } from './components/ProductCard';
 import { useVoiceInput } from './hooks/useVoiceInput';
+import { AuthProvider } from '@/app/contexts/AuthContext';
 
 export default function ChatPage() {
   const [files, setFiles] = useState<FileList | undefined>(undefined);
@@ -109,8 +110,9 @@ export default function ChatPage() {
 
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <ChatHeader showDebug={showDebug} onToggleDebug={() => setShowDebug(!showDebug)} />
+    <AuthProvider>
+      <div className="min-h-screen bg-gray-50">
+        <ChatHeader showDebug={showDebug} onToggleDebug={() => setShowDebug(!showDebug)} />
 
       {/* Debug Panel */}
       {showDebug && (
@@ -326,5 +328,6 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+    </AuthProvider>
   );
 }
