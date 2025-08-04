@@ -9,13 +9,24 @@ import { findRelevantContent } from '@/lib/ai/embedding';
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
 
+// Simple language detection based on Chinese characters
+function detectLanguageFromMessages(messages: Message[]): string {
+  const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+  if (!lastUserMessage?.content) return 'en';
+  
+  // Check if the message contains Chinese characters
+  const chineseRegex = /[\u4e00-\u9fff]/;
+  return chineseRegex.test(lastUserMessage.content) ? 'zh' : 'en';
+}
+
 export async function POST(req: Request) {
   try {
     console.log('Chat API: Received request');
     const body = await req.json();
     console.log('Full request body:', JSON.stringify(body, null, 2));
-    const { messages }: { messages: Message[] } = body;
+    const { messages, language }: { messages: Message[]; language?: string } = body;
     console.log('Chat API: Messages received:', messages.length);
+    console.log('Chat API: Language preference:', language);
 
   // check if user has sent a PDF
   const messagesHavePDF = messages.some(message =>
@@ -24,11 +35,23 @@ export async function POST(req: Request) {
     ),
   );
 
+  // Detect language from messages if not provided
+  const detectedLanguage = language || detectLanguageFromMessages(messages);
+  console.log('Chat API: Using language:', detectedLanguage);
+
   const result = streamText({
     model: messagesHavePDF
       ? anthropic('claude-3-5-sonnet-latest')
       : openai('gpt-4o'),
     system: `You are Groceries Guru, an expert AI shopping assistant specializing in grocery and food products. Your goal is to help users make informed purchasing decisions by providing personalized recommendations based on their preferences, dietary restrictions, and needs.
+
+    ## Language Instructions:
+    - The user's preferred language is: ${detectedLanguage === 'zh' ? 'Chinese (中文)' : 'English'}
+    - ${detectedLanguage === 'zh' 
+        ? 'ALWAYS respond in Chinese (中文). Provide product names in both Chinese and English when helpful. Include Chinese brand names when available.'
+        : 'ALWAYS respond in English. You may include Chinese product names in parentheses when relevant for Chinese products.'
+    }
+    - Be natural and conversational in the target language
 
     ## Your Role & Personality:
     - You are a friendly, knowledgeable grocery expert who has extensive knowledge of food products, brands, ingredients, and nutrition

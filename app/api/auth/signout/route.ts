@@ -18,15 +18,17 @@ export async function POST(request: NextRequest) {
         .where(eq(teamMembers.userId, user.id))
         .limit(1);
 
-      // Log the signout activity
-      await db.insert(activityLogs).values({
-        teamId: userTeam[0]?.teamId || null,
-        userId: user.id,
-        action: 'SIGN_OUT',
-        ipAddress: request.headers.get('x-forwarded-for') || 
-                   request.headers.get('x-real-ip') || 
-                   'unknown'
-      });
+      // Log the signout activity only if user has a team
+      if (userTeam[0]?.teamId) {
+        await db.insert(activityLogs).values({
+          teamId: userTeam[0].teamId,
+          userId: user.id,
+          action: 'SIGN_OUT',
+          ipAddress: request.headers.get('x-forwarded-for') || 
+                     request.headers.get('x-real-ip') || 
+                     'unknown'
+        });
+      }
     }
 
     // Clear session cookie

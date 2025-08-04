@@ -1,6 +1,8 @@
 import { ShoppingCart, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { useLanguage } from '@/app/contexts/LanguageContext';
+import { LanguageToggle } from '@/components/ui/language-toggle';
 
 interface ChatHeaderProps {
   showDebug: boolean;
@@ -9,6 +11,7 @@ interface ChatHeaderProps {
 
 export const ChatHeader = ({ showDebug, onToggleDebug }: ChatHeaderProps) => {
   const { user, signOut } = useAuth();
+  const { t } = useLanguage();
 
   return (
     <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -19,8 +22,8 @@ export const ChatHeader = ({ showDebug, onToggleDebug }: ChatHeaderProps) => {
               <ShoppingCart className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="font-semibold text-gray-900">Groceries Guru</h1>
-              <p className="text-sm text-gray-500">Your AI Shopping Assistant</p>
+              <h1 className="font-semibold text-gray-900">{t('app.title')}</h1>
+              <p className="text-sm text-gray-500">{t('app.subtitle')}</p>
             </div>
           </div>
           
@@ -39,12 +42,14 @@ export const ChatHeader = ({ showDebug, onToggleDebug }: ChatHeaderProps) => {
                   size="sm"
                   onClick={signOut}
                   className="text-xs text-gray-500 hover:text-red-600"
-                  title="Sign out"
+                  title={t('user.signout')}
                 >
                   <LogOut className="h-4 w-4" />
                 </Button>
               </div>
             )}
+            
+            <LanguageToggle />
             
             <Button
               variant="outline"
@@ -52,7 +57,7 @@ export const ChatHeader = ({ showDebug, onToggleDebug }: ChatHeaderProps) => {
               onClick={onToggleDebug}
               className="text-xs"
             >
-              {showDebug ? 'Hide' : 'Show'} Debug
+              {showDebug ? t('debug.hide') : t('debug.show')}
             </Button>
           </div>
         </div>

@@ -74,15 +74,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Log the signup activity
-    await db.insert(activityLogs).values({
-      teamId: newTeam[0]?.id || null,
-      userId: newUser[0].id,
-      action: 'SIGN_UP',
-      ipAddress: request.headers.get('x-forwarded-for') || 
-                 request.headers.get('x-real-ip') || 
-                 'unknown'
-    });
+    // Log the signup activity only if team was created
+    if (newTeam[0]?.id) {
+      await db.insert(activityLogs).values({
+        teamId: newTeam[0].id,
+        userId: newUser[0].id,
+        action: 'SIGN_UP',
+        ipAddress: request.headers.get('x-forwarded-for') || 
+                   request.headers.get('x-real-ip') || 
+                   'unknown'
+      });
+    }
 
     // Set session
     await setSession(newUser[0]);

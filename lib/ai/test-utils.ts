@@ -22,7 +22,7 @@ export async function testMilvusSearch(): Promise<TestResult> {
     
     return {
       test: 'Milvus Search - Healthy Breakfast Cereals',
-      passed: result && (result.success === true || result.results !== undefined),
+      passed: !!(result && (result.success === true || result.results !== undefined)),
       result: result,
       duration
     };
@@ -49,7 +49,7 @@ export async function testWebSearch(): Promise<TestResult> {
     
     return {
       test: 'Web Search - Organic Oat Milk Brands',
-      passed: result && result.success === true && result.content && result.content.length > 0,
+      passed: !!(result && result.success === true && result.content && result.content.length > 0),
       result: result,
       duration
     };
@@ -85,7 +85,7 @@ export async function testMultipleQueries(): Promise<TestResult[]> {
       
       results.push({
         test: `Milvus Search - ${query}`,
-        passed: result && (result.success === true || result.results !== undefined),
+        passed: !!(result && (result.success === true || result.results !== undefined)),
         result: result,
         duration
       });

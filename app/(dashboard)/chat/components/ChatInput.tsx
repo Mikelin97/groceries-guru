@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { Send, Mic, Camera, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useLanguage } from '@/app/contexts/LanguageContext';
 import Image from 'next/image';
 
 interface ChatInputProps {
@@ -30,6 +31,7 @@ export const ChatInput = ({
 }: ChatInputProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showVoiceInfo, setShowVoiceInfo] = useState(false);
+  const { t } = useLanguage();
   
   // Check if we're on HTTPS or localhost
   const isSecureContext = typeof window !== 'undefined' && 
@@ -70,7 +72,7 @@ export const ChatInput = ({
                 : 'border-gray-300'
             }`}
             value={input}
-            placeholder={isListening ? "Listening... speak now" : "Ask about any grocery product..."}
+            placeholder={isListening ? t('chat.listening') : t('chat.placeholder')}
             onChange={onInputChange}
             disabled={isLoading}
           />
@@ -125,10 +127,10 @@ export const ChatInput = ({
               }`}
               title={
                 isMobile && !isSecureContext 
-                  ? 'Voice input requires HTTPS on mobile devices' 
+                  ? t('voice.tooltip.https')
                   : isRecording 
-                    ? 'Stop recording' 
-                    : 'Start voice input'
+                    ? t('voice.tooltip.stop')
+                    : t('voice.tooltip.start')
               }
             >
               {isMobile && !isSecureContext ? (
@@ -150,9 +152,9 @@ export const ChatInput = ({
             {/* HTTPS info popup */}
             {showVoiceInfo && (
               <div className="absolute bottom-full mb-2 right-0 bg-black text-white text-xs rounded-lg p-3 w-64 z-50">
-                <div className="text-yellow-300 font-medium mb-1">Voice input requires HTTPS</div>
-                <div className="mb-2">Mobile browsers require a secure connection (HTTPS) to access the microphone.</div>
-                <div className="text-gray-300">Try accessing via HTTPS or use the desktop version.</div>
+                <div className="text-yellow-300 font-medium mb-1">{t('voice.https.title')}</div>
+                <div className="mb-2">{t('voice.https.description')}</div>
+                <div className="text-gray-300">{t('voice.https.suggestion')}</div>
                 <button 
                   onClick={() => setShowVoiceInfo(false)}
                   className="absolute top-1 right-2 text-gray-400 hover:text-white"

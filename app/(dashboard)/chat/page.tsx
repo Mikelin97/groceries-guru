@@ -10,17 +10,22 @@ import { ChatInput } from './components/ChatInput';
 import { ProductCard, ProductRecommendation } from './components/ProductCard';
 import { useVoiceInput } from './hooks/useVoiceInput';
 import { AuthProvider } from '@/app/contexts/AuthContext';
+import { LanguageProvider, useLanguage } from '@/app/contexts/LanguageContext';
 
-export default function ChatPage() {
+function ChatContent() {
   const [files, setFiles] = useState<FileList | undefined>(undefined);
   const [showDebug, setShowDebug] = useState(false);
   const [testResults, setTestResults] = useState<any>(null);
   const [useSimpleChat, setUseSimpleChat] = useState(false);
+  const { t, language } = useLanguage();
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
-    key: useSimpleChat ? 'simple-chat' : 'full-chat', // Force re-initialization
+    key: `${useSimpleChat ? 'simple-chat' : 'full-chat'}-${language}`, // Force re-initialization when language changes
     api: useSimpleChat ? '/api/chat-simple' : '/api/chat',
     ...(useSimpleChat ? {} : { maxSteps: 5 }),
+    body: {
+      language: language || 'en'
+    },
     onError: (error) => {
       console.error('Chat error:', error);
     },
@@ -110,8 +115,7 @@ export default function ChatPage() {
 
 
   return (
-    <AuthProvider>
-      <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
         <ChatHeader showDebug={showDebug} onToggleDebug={() => setShowDebug(!showDebug)} />
 
       {/* Debug Panel */}
@@ -215,17 +219,17 @@ export default function ChatPage() {
                 <div className="bg-orange-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                   <ShoppingCart className="h-8 w-8 text-orange-500" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Welcome to Groceries Guru!</h3>
-                <p className="text-gray-500 mb-4">Ask me about any grocery products and I'll help you make the best choice.</p>
+                <h3 className="font-semibold text-gray-900 mb-2">{t('chat.welcome.title')}</h3>
+                <p className="text-gray-500 mb-4">{t('chat.welcome.subtitle')}</p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   <button className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-full transition-colors">
-                    "Best breakfast cereals"
+                    {t('chat.suggestions.cereals')}
                   </button>
                   <button className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-full transition-colors">
-                    "Healthy snack options"
+                    {t('chat.suggestions.snacks')}
                   </button>
                   <button className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-full transition-colors">
-                    "Gluten-free alternatives"
+                    {t('chat.suggestions.glutenfree')}
                   </button>
                 </div>
               </div>
@@ -248,10 +252,10 @@ export default function ChatPage() {
                         <div className="animate-spin h-4 w-4 border-2 border-gray-300 border-t-orange-500 rounded-full"></div>
                         <span className="italic">
                           {useSimpleChat 
-                            ? 'Thinking...' 
+                            ? t('chat.thinking')
                             : message?.toolInvocations?.[0]?.toolName === 'getInformation' 
-                              ? 'Searching knowledge base...' 
-                              : 'Searching web...'
+                              ? t('chat.searching.kb')
+                              : t('chat.searching.web')
                           }
                         </span>
                       </div>
@@ -328,6 +332,15 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <AuthProvider>
+      <LanguageProvider>
+        <ChatContent />
+      </LanguageProvider>
     </AuthProvider>
   );
 }
