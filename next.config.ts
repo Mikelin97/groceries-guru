@@ -5,7 +5,10 @@ const nextConfig: NextConfig = {
     ppr: true,
     clientSegmentCache: true,
     nodeMiddleware: true
-  }
+  },
+  output: 'standalone',
+  // Disable telemetry in production
+  productionBrowserSourceMaps: false
 };
 
 export default nextConfig;

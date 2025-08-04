@@ -1,26 +1,44 @@
-import { MilvusClient, } from "@zilliz/milvus2-sdk-node";
+import { MilvusClient } from "@zilliz/milvus2-sdk-node";
 
+// Use environment variable for Milvus address, fallback to localhost for development
+const address = process.env.MILVUS_URL || "http://localhost:19530";
 
-const address = "http://localhost:19530";
+// Initialize client lazily to avoid build-time connection issues
+let client: MilvusClient | null = null;
 
-// connect to milvus
-const client = new MilvusClient({address});
+const getClient = async () => {
+  if (!client) {
+    try {
+      client = new MilvusClient({ address });
+      // Test the connection
+      await client.checkHealth();
+      console.log('✅ Milvus client connected successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize Milvus client:', error);
+      throw new Error(`Milvus connection unavailable at ${address}`);
+    }
+  }
+  return client;
+};
 
 
 
 
 export const findRelevantContent = async (userQuery: string) => {
     try {
+        // Get the Milvus client
+        const milvusClient = await getClient();
+        
         // Collection name for grocery/FMCG products
         const collectionName = "fmcg_v1"; 
 
         // Load collection
-        await client.loadCollectionSync({
+        await milvusClient.loadCollectionSync({
             collection_name: collectionName,
         });
 
         // Enhanced search with more relevant fields for grocery products
-        const res = await client.search({
+        const res = await milvusClient.search({
             collection_name: collectionName,
             data: [userQuery],
             anns_field: "content_dense",
