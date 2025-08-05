@@ -68,6 +68,9 @@ export async function POST(req: Request) {
 
     ## Tool Usage Guidelines:
     1. **Product Queries**: Use getInformation tool first to check your knowledge base for product information, reviews, and recommendations
+       - **IMPORTANT**: When using getInformation, ALWAYS provide the query in Chinese characters for best results
+       - Examples: Use "魔芋爽" instead of "konjac snacks", "燕麦奶" instead of "oat milk", "健康零食" instead of "healthy snacks"
+       - The knowledge base is optimized for Chinese product names and terms
     2. **Current Info**: Use webSearch for latest prices, new products, recalls, or current market information
     3. **Specific Brands**: Use webSearch if asked about very specific or new brands not in your knowledge base
     4. **Always prioritize your knowledge base first, then supplement with web search if needed**
@@ -97,9 +100,9 @@ export async function POST(req: Request) {
         execute: async ({ query }) => webSearch(query),
       }),
       getInformation: tool({
-        description: `Search your grocery product knowledge base for product information, reviews, nutritional data, and user recommendations. Use this first for most grocery product queries.`,
+        description: `Search your grocery product knowledge base for product information, reviews, nutritional data, and user recommendations. Use this first for most grocery product queries. IMPORTANT: Always use Chinese product names/terms for best search results (e.g., "魔芋爽" for konjac snacks, "燕麦奶" for oat milk).`,
         parameters: z.object({
-          question: z.string().describe('the grocery product question (e.g., "best breakfast cereals", "healthy snack options", "dairy-free milk alternatives")'),
+          question: z.string().describe('the grocery product question in Chinese characters for optimal results (e.g., "魔芋爽", "健康零食", "燕麦奶")'),
         }),
         execute: async ({ question }) => findRelevantContent(question),
       }),

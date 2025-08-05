@@ -9,9 +9,9 @@ export async function GET() {
       anthropic_key: !!process.env.ANTHROPIC_API_KEY,
       node_env: process.env.NODE_ENV,
     },
-    milvus: {
-      address: 'http://localhost:19530',
-      // Don't test connection here to avoid blocking
+    services: {
+      postgres: !!process.env.POSTGRES_URL,
+      redis: !!process.env.REDIS_URL,
     }
   };
 

@@ -1,7 +1,11 @@
 #!/usr/bin/env tsx
 // Simple test runner for AI functions
 
+import { config } from 'dotenv';
 import { runAllTests } from './lib/ai/test-utils';
+
+// Load environment variables
+config({ path: '.env' });
 
 async function main() {
   console.log('🛒 Groceries Guru AI Function Tests\n');
