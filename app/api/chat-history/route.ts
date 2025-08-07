@@ -100,6 +100,20 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      case 'save_to_database': {
+        const { conversationId } = data;
+        const result = await chatHistoryService.saveConversationToDatabase(
+          conversationId,
+          user.id
+        );
+
+        return NextResponse.json({
+          success: result.success,
+          messagesSaved: result.messagesSaved,
+          error: result.error,
+        });
+      }
+
       default:
         return NextResponse.json(
           { error: 'Invalid action', success: false },

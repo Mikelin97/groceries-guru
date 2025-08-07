@@ -1,7 +1,7 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ShoppingCart, Clock, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,20 +19,91 @@ function ChatContent() {
   const [testResults, setTestResults] = useState<any>(null);
   const [useSimpleChat, setUseSimpleChat] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [initialMessages, setInitialMessages] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const { t, language } = useLanguage();
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const convId = searchParams.get('conversationId');
     if (convId) {
-      setConversationId(parseInt(convId));
+      const newConversationId = parseInt(convId);
+      setConversationId(newConversationId);
+      // Load existing conversation history
+      loadConversationHistory(newConversationId);
+    } else {
+      // Reset for new chat
+      setConversationId(null);
+      setInitialMessages([]);
+      setIsLoadingHistory(false);
     }
   }, [searchParams]);
 
+  const loadConversationHistory = async (convId: number) => {
+    setIsLoadingHistory(true);
+    try {
+      const response = await fetch(`/api/chat-history?conversationId=${convId}`);
+      const data = await response.json();
+      
+      if (data.success && data.messages) {
+        // Convert the messages to the format expected by useChat
+        const formattedMessages = data.messages.map((msg: any) => ({
+          id: msg.id || msg.tempId || `msg-${Date.now()}-${Math.random()}`,
+          role: msg.role,
+          content: msg.content,
+          createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+          experimental_attachments: msg.attachments,
+          toolInvocations: msg.toolInvocations,
+        }));
+        
+        setInitialMessages(formattedMessages);
+        console.log(`✅ Loaded ${formattedMessages.length} messages for conversation ${convId}:`, formattedMessages.map((m: any) => ({ role: m.role, content: m.content.substring(0, 50) + '...' })));
+      } else {
+        console.log(`No messages found for conversation ${convId}`);
+        setInitialMessages([]);
+      }
+    } catch (error) {
+      console.error('Failed to load conversation history:', error);
+      setInitialMessages([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Function to save conversation to database
+  const saveConversationToDatabase = useCallback(async () => {
+    if (!conversationId || isSaving) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/chat-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_to_database',
+          conversationId: conversationId,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        console.log(`✅ Saved ${result.messagesSaved} messages to database`);
+      } else {
+        console.error('❌ Failed to save conversation:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error saving conversation:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [conversationId, isSaving]);
+
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
-    key: `${useSimpleChat ? 'simple-chat' : 'full-chat'}-${language}`, // Force re-initialization when language changes
+    key: `${useSimpleChat ? 'simple-chat' : 'full-chat'}-${language}-${conversationId}`, // Force re-initialization when language or conversation changes
     api: useSimpleChat ? '/api/chat-simple' : '/api/chat',
     ...(useSimpleChat ? {} : { maxSteps: 5 }),
+    initialMessages: initialMessages,
     body: {
       language: language || 'en',
       conversationId: conversationId
@@ -52,6 +123,34 @@ function ChatContent() {
       }
     }
   });
+
+  // Auto-save when user navigates away or closes tab
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (conversationId && messages.length > 0) {
+        // Save conversation before page unloads
+        saveConversationToDatabase();
+        // Show confirmation dialog
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && conversationId && messages.length > 0) {
+        // Save when tab becomes hidden
+        saveConversationToDatabase();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [conversationId, messages.length, saveConversationToDatabase]);
 
   // Voice input functionality
   const { isRecording, isListening, handleVoiceToggle } = useVoiceInput((text) => {
@@ -132,7 +231,13 @@ function ChatContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-        <ChatHeader showDebug={showDebug} onToggleDebug={() => setShowDebug(!showDebug)} />
+        <ChatHeader 
+          showDebug={showDebug} 
+          onToggleDebug={() => setShowDebug(!showDebug)}
+          onSaveChat={saveConversationToDatabase}
+          isSaving={isSaving}
+          conversationId={conversationId}
+        />
 
       {/* Debug Panel */}
       {showDebug && (
@@ -230,7 +335,13 @@ function ChatContent() {
           
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.length === 0 && (
+            {isLoadingHistory ? (
+              <div className="text-center py-12">
+                <div className="animate-spin h-8 w-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <h3 className="font-semibold text-gray-900 mb-2">Loading conversation...</h3>
+                <p className="text-gray-500">Please wait while we load your chat history</p>
+              </div>
+            ) : messages.length === 0 && !conversationId ? (
               <div className="text-center py-12">
                 <div className="bg-orange-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                   <ShoppingCart className="h-8 w-8 text-orange-500" />
@@ -249,7 +360,16 @@ function ChatContent() {
                   </button>
                 </div>
               </div>
-            )}
+            ) : messages.length === 0 && conversationId ? (
+              <div className="text-center py-12">
+                <div className="bg-gray-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                  <ShoppingCart className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Conversation Found</h3>
+                <p className="text-gray-500 mb-4">This conversation appears to be empty or the messages couldn't be loaded.</p>
+                <p className="text-gray-500">You can start chatting to continue this conversation.</p>
+              </div>
+            ) : null}
 
             {messages.map((message) => (
               <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>

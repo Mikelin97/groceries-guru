@@ -36,7 +36,7 @@ export class ChatHistoryService {
     language: string = 'en',
     title?: string
   ): Promise<Conversation> {
-    // Create conversation in PostgreSQL first
+    // Create conversation metadata in PostgreSQL (but messages will be saved later)
     const [conversation] = await db.insert(conversations)
       .values({
         userId,
@@ -46,24 +46,76 @@ export class ChatHistoryService {
         isActive: 1,
         createdAt: new Date(),
         updatedAt: new Date(),
+        messageCount: 0, // Messages will be counted when saved from Redis
       })
       .returning();
 
-    // Cache the conversation summary
+    // Cache the conversation summary for quick access
     const redis = await this.redis;
     await redis.zAdd(
       CHAT_KEYS.conversationList(userId),
       { score: Date.now(), value: JSON.stringify(conversation) }
     );
 
-    // Keep only the most recent conversations
+    // Keep only the most recent conversations in cache
     await redis.zRemRangeByRank(
       CHAT_KEYS.conversationList(userId),
       0,
       -(CHAT_CONFIG.CONVERSATION_LIST_SIZE + 1)
     );
 
+    console.log(`Created new conversation ${conversation.id} for user ${userId}`);
     return conversation;
+  }
+
+  async addMessageToRedis(
+    conversationId: number,
+    message: ChatMessage
+  ): Promise<{ success: boolean; tempId: string }> {
+    const tempId = uuidv4();
+
+    return await withCircuitBreaker(async () => {
+      return await withRetry(async () => {
+        try {
+          const redis = await this.redis;
+          const tempMessage = {
+            ...message,
+            tempId,
+            createdAt: new Date(),
+            conversationId,
+          };
+
+          // Store in Redis only for fast chat experience
+          await redis.lPush(
+            CHAT_KEYS.recentMessages(conversationId),
+            JSON.stringify(tempMessage)
+          );
+
+          await redis.lTrim(
+            CHAT_KEYS.recentMessages(conversationId),
+            0,
+            CHAT_CONFIG.MESSAGE_BUFFER_SIZE - 1
+          );
+
+          // Set expiration for the conversation messages
+          await redis.expire(
+            CHAT_KEYS.recentMessages(conversationId),
+            CHAT_CONFIG.SESSION_TTL
+          );
+
+          return { success: true, tempId };
+        } catch (error) {
+          const err = error as Error;
+          if (isTransientError(err)) {
+            throw new RetryableError(`Failed to store message to Redis: ${err.message}`, err);
+          }
+          throw new NonRetryableError(`Non-retryable error storing message to Redis: ${err.message}`, err);
+        }
+      });
+    }, {
+      failureThreshold: 3,
+      recoveryTimeout: 30000,
+    });
   }
 
   async addMessage(
@@ -196,22 +248,19 @@ export class ChatHistoryService {
     const cacheKey = CHAT_KEYS.recentMessages(conversationId);
 
     try {
-      // Try Redis first for recent messages
+      // Try Redis first for ongoing/recent conversations
       const cachedMessages = await redis.lRange(cacheKey, 0, -1);
       
       if (cachedMessages.length > 0) {
+        // Return Redis messages for ongoing chat sessions
         const parsedMessages = cachedMessages
           .reverse()
           .map(msg => JSON.parse(msg))
-          .filter(msg => includeTemp || !msg.tempId);
+          .filter(msg => includeTemp || !msg.tempId) // Filter temp messages if needed
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-        // If we have messages and are including temp messages, return from cache
-        if (parsedMessages.length > 0 && includeTemp) {
-          return parsedMessages;
-        }
-        
-        // If we have enough permanent messages, return from cache
-        if (parsedMessages.length >= 20 && !includeTemp) {
+        if (parsedMessages.length > 0) {
+          console.log(`Retrieved ${parsedMessages.length} messages from Redis for conversation ${conversationId}`);
           return parsedMessages;
         }
       }
@@ -342,6 +391,76 @@ export class ChatHistoryService {
         isActive: conv.isActive === 1,
         createdAt: conv.createdAt,
       }));
+    }
+  }
+
+  async saveConversationToDatabase(
+    conversationId: number,
+    userId: number
+  ): Promise<{ success: boolean; messagesSaved: number; error?: string }> {
+    try {
+      const redis = await this.redis;
+      const cacheKey = CHAT_KEYS.recentMessages(conversationId);
+      
+      // Get all messages from Redis for this conversation
+      const cachedMessages = await redis.lRange(cacheKey, 0, -1);
+      
+      if (cachedMessages.length === 0) {
+        return { success: true, messagesSaved: 0 };
+      }
+
+      // Parse messages and sort by creation time
+      const parsedMessages = cachedMessages
+        .reverse() // Redis stores in reverse order
+        .map(msg => JSON.parse(msg))
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      let messagesSaved = 0;
+
+      // Save each message to PostgreSQL
+      for (const message of parsedMessages) {
+        try {
+          await db.insert(messages)
+            .values({
+              conversationId,
+              role: message.role,
+              content: message.content,
+              attachments: message.attachments ? JSON.stringify(message.attachments) : null,
+              toolInvocations: message.toolInvocations ? JSON.stringify(message.toolInvocations) : null,
+              metadata: message.metadata ? JSON.stringify(message.metadata) : null,
+              createdAt: new Date(message.createdAt),
+              updatedAt: new Date(),
+            })
+            .onConflictDoNothing(); // In case message already exists
+
+          messagesSaved++;
+        } catch (error) {
+          console.error('Error saving individual message:', error);
+        }
+      }
+
+      // Update conversation metadata
+      await db.update(conversations)
+        .set({
+          lastMessageAt: new Date(),
+          messageCount: messagesSaved,
+          updatedAt: new Date(),
+        })
+        .where(eq(conversations.id, conversationId));
+
+      // Clean up Redis cache after successful save
+      await redis.del(cacheKey);
+
+      console.log(`Saved ${messagesSaved} messages to database for conversation ${conversationId}`);
+      return { success: true, messagesSaved };
+
+    } catch (error) {
+      console.error('Error saving conversation to database:', error);
+      return { 
+        success: false, 
+        messagesSaved: 0, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
     }
   }
 

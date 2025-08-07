@@ -7,7 +7,6 @@ import { webSearch } from '@/lib/ai/web-search';
 import { findRelevantContent } from '@/lib/ai/embedding';
 import { ChatHistoryService } from '@/lib/chat/history-service';
 import { getUser } from '@/lib/db/queries';
-import { getGlobalSyncService } from '@/lib/chat/sync-service';
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
@@ -44,8 +43,6 @@ export async function POST(req: Request) {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    // Ensure sync service is running
-    getGlobalSyncService();
 
   // check if user has sent a PDF
   const messagesHavePDF = messages.some(message =>
@@ -77,18 +74,18 @@ export async function POST(req: Request) {
     }
   }
 
-  // Store user message optimistically if we have a conversation
+  // Store user message to Redis only during chat
   const lastUserMessage = messages.filter(m => m.role === 'user').pop();
   if (currentConversationId && lastUserMessage) {
     try {
-      await chatHistoryService.addMessage(currentConversationId, {
+      await chatHistoryService.addMessageToRedis(currentConversationId, {
         role: lastUserMessage.role,
         content: lastUserMessage.content,
         attachments: lastUserMessage.experimental_attachments,
         metadata: { timestamp: new Date() }
-      }, true); // optimistic = true for fast response
+      });
     } catch (error) {
-      console.error('Failed to store user message:', error);
+      console.error('Failed to store user message to Redis:', error);
     }
   }
 
@@ -161,10 +158,10 @@ export async function POST(req: Request) {
       }),
     },
     onFinish: async (result) => {
-      // Store assistant's response after completion
+      // Store assistant's response to Redis only during chat
       if (currentConversationId && result.text) {
         try {
-          await chatHistoryService.addMessage(currentConversationId, {
+          await chatHistoryService.addMessageToRedis(currentConversationId, {
             role: 'assistant',
             content: result.text,
             toolInvocations: result.toolCalls,
@@ -173,10 +170,10 @@ export async function POST(req: Request) {
               usage: result.usage,
               finishReason: result.finishReason
             }
-          }, true); // optimistic = true
-          console.log('Stored assistant response for conversation:', currentConversationId);
+          });
+          console.log('Stored assistant response to Redis for conversation:', currentConversationId);
         } catch (error) {
-          console.error('Failed to store assistant response:', error);
+          console.error('Failed to store assistant response to Redis:', error);
         }
       }
     }
