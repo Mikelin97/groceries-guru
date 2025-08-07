@@ -7,12 +7,9 @@ pnpm-lock.yaml
 .next/
 out/
 
-# Environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Environment files - NEVER include in Docker images
+.env*
+!.env.example
 
 # Git
 .git
@@ -43,6 +40,11 @@ README.md
 *.md
 .prettierrc
 .eslintrc.json
+
+# AWS deployment files (not needed in container)
+aws/
+scripts/setup-*
+scripts/deploy-*
 
 # Certificates (for local development)
 certificates/

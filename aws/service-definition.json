@@ -1,0 +1,47 @@
+{
+  "serviceName": "groceries-guru-service",
+  "cluster": "groceries-guru-cluster",
+  "taskDefinition": "groceries-guru",
+  "desiredCount": 1,
+  "launchType": "FARGATE",
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": [
+        "subnet-0d3f010a7b4f877c8",
+        "subnet-0ffe5bacfb2a50623"
+      ],
+      "securityGroups": [
+        "sg-09a44d5e77735baf4"
+      ],
+      "assignPublicIp": "ENABLED"
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "arn:aws:elasticloadbalancing:us-west-2:211125743595:targetgroup/groceries-guru-tg/1109e99399b6aaa5",
+      "containerName": "groceries-guru",
+      "containerPort": 3000
+    }
+  ],
+  "serviceRegistries": [],
+  "deploymentConfiguration": {
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 50,
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    }
+  },
+  "healthCheckGracePeriodSeconds": 300,
+  "enableExecuteCommand": true,
+  "tags": [
+    {
+      "key": "Environment",
+      "value": "production"
+    },
+    {
+      "key": "Application",
+      "value": "groceries-guru"
+    }
+  ]
+}

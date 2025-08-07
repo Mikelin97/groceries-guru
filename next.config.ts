@@ -8,7 +8,10 @@ const nextConfig: NextConfig = {
   },
   output: 'standalone',
   // Disable telemetry in production
-  productionBrowserSourceMaps: false
+  productionBrowserSourceMaps: false,
+  // Skip build-time data fetching
+  trailingSlash: false,
+  skipTrailingSlashRedirect: true
 };
 
 export default nextConfig;

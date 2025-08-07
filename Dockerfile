@@ -22,6 +22,16 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV SKIP_BUILD_STATIC_GENERATION=true
+ENV POSTGRES_URL=postgresql://placeholder:placeholder@placeholder:5432/placeholder
+ENV STRIPE_SECRET_KEY=sk_test_placeholder_for_build_only
+ENV STRIPE_WEBHOOK_SECRET=whsec_placeholder_for_build_only
+ENV AUTH_SECRET=placeholder_auth_secret_minimum_32_chars
+ENV OPENAI_API_KEY=sk-placeholder
+ENV ANTHROPIC_API_KEY=sk-ant-placeholder
+ENV ALIBABA_CLOUD_ACCESS_KEY_ID=placeholder
+ENV ALIBABA_CLOUD_ACCESS_KEY_SECRET=placeholder
+ENV BAILIAN_WORKSPACE_ID=placeholder
+ENV BAILIAN_INDEX_ID=placeholder
 
 # Build the application (with static generation disabled for problematic routes)
 RUN npm run build

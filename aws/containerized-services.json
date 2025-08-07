@@ -1,0 +1,248 @@
+{
+  "family": "groceries-guru-with-services",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::211125743595:role/ECS_TASK",
+  "taskRoleArn": "arn:aws:iam::211125743595:role/ECS_TASK",
+  "containerDefinitions": [
+    {
+      "name": "postgres",
+      "image": "postgres:16.4-alpine",
+      "essential": true,
+      "environment": [
+        {
+          "name": "POSTGRES_DB",
+          "value": "groceries_guru"
+        },
+        {
+          "name": "POSTGRES_USER",
+          "value": "postgres"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "POSTGRES_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:POSTGRES_PASSWORD::"
+        }
+      ],
+      "portMappings": [
+        {
+          "containerPort": 5432,
+          "protocol": "tcp"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "postgres-data",
+          "containerPath": "/var/lib/postgresql/data"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d groceries_guru"
+        ],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/groceries-guru-postgres",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "postgres"
+        }
+      }
+    },
+    {
+      "name": "redis",
+      "image": "redis:7.2-alpine",
+      "essential": true,
+      "command": ["redis-server", "--appendonly", "yes"],
+      "portMappings": [
+        {
+          "containerPort": 6379,
+          "protocol": "tcp"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "redis-data",
+          "containerPath": "/data"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/groceries-guru-redis",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "redis"
+        }
+      }
+    },
+    {
+      "name": "groceries-guru",
+      "image": "211125743595.dkr.ecr.us-west-2.amazonaws.com/groceries-guru:latest",
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "dependsOn": [
+        {
+          "containerName": "postgres",
+          "condition": "HEALTHY"
+        },
+        {
+          "containerName": "redis",
+          "condition": "HEALTHY"
+        }
+      ],
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PORT",
+          "value": "3000"
+        },
+        {
+          "name": "HOSTNAME",
+          "value": "0.0.0.0"
+        },
+        {
+          "name": "NEXT_TELEMETRY_DISABLED",
+          "value": "1"
+        },
+        {
+          "name": "POSTGRES_HOST",
+          "value": "localhost"
+        },
+        {
+          "name": "POSTGRES_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "REDIS_HOST",
+          "value": "localhost"
+        },
+        {
+          "name": "REDIS_PORT",
+          "value": "6379"
+        },
+        {
+          "name": "ALIBABA_CLOUD_REGION",
+          "value": "cn-beijing"
+        },
+        {
+          "name": "BAILIAN_ENDPOINT",
+          "value": "bailian.cn-beijing.aliyuncs.com"
+        },
+        {
+          "name": "USE_CLOUD_VECTOR_DB",
+          "value": "true"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "POSTGRES_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:POSTGRES_URL::"
+        },
+        {
+          "name": "POSTGRES_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:POSTGRES_PASSWORD::"
+        },
+        {
+          "name": "REDIS_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:REDIS_URL::"
+        },
+        {
+          "name": "AUTH_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:AUTH_SECRET::"
+        },
+        {
+          "name": "STRIPE_SECRET_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:STRIPE_SECRET_KEY::"
+        },
+        {
+          "name": "STRIPE_WEBHOOK_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:STRIPE_WEBHOOK_SECRET::"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:OPENAI_API_KEY::"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:ANTHROPIC_API_KEY::"
+        },
+        {
+          "name": "ALIBABA_CLOUD_ACCESS_KEY_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:ALIBABA_CLOUD_ACCESS_KEY_ID::"
+        },
+        {
+          "name": "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:ALIBABA_CLOUD_ACCESS_KEY_SECRET::"
+        },
+        {
+          "name": "BAILIAN_WORKSPACE_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:BAILIAN_WORKSPACE_ID::"
+        },
+        {
+          "name": "BAILIAN_INDEX_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-west-2:211125743595:secret:groceries-guru:BAILIAN_INDEX_ID::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/groceries-guru",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:3000/api/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "name": "postgres-data",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "REPLACE_WITH_EFS_ID",
+        "rootDirectory": "/postgres-data"
+      }
+    },
+    {
+      "name": "redis-data",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "REPLACE_WITH_EFS_ID",
+        "rootDirectory": "/redis-data"
+      }
+    }
+  ]
+}
