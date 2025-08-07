@@ -1,7 +1,8 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ShoppingCart, Clock, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
@@ -17,14 +18,24 @@ function ChatContent() {
   const [showDebug, setShowDebug] = useState(false);
   const [testResults, setTestResults] = useState<any>(null);
   const [useSimpleChat, setUseSimpleChat] = useState(false);
+  const [conversationId, setConversationId] = useState<number | null>(null);
   const { t, language } = useLanguage();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const convId = searchParams.get('conversationId');
+    if (convId) {
+      setConversationId(parseInt(convId));
+    }
+  }, [searchParams]);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
     key: `${useSimpleChat ? 'simple-chat' : 'full-chat'}-${language}`, // Force re-initialization when language changes
     api: useSimpleChat ? '/api/chat-simple' : '/api/chat',
     ...(useSimpleChat ? {} : { maxSteps: 5 }),
     body: {
-      language: language || 'en'
+      language: language || 'en',
+      conversationId: conversationId
     },
     onError: (error) => {
       console.error('Chat error:', error);
@@ -34,6 +45,11 @@ function ChatContent() {
     },
     onResponse: (response) => {
       console.log('Chat response received:', response.status, response.url);
+      // Track conversation ID from response headers
+      const newConvId = response.headers.get('X-Conversation-Id');
+      if (newConvId && !conversationId) {
+        setConversationId(parseInt(newConvId));
+      }
     }
   });
 
@@ -339,7 +355,9 @@ export default function ChatPage() {
   return (
     <AuthProvider>
       <LanguageProvider>
-        <ChatContent />
+        <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>}>
+          <ChatContent />
+        </Suspense>
       </LanguageProvider>
     </AuthProvider>
   );

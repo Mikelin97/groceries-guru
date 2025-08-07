@@ -5,9 +5,14 @@ import { z } from 'zod';
 import { anthropic } from '@ai-sdk/anthropic';
 import { webSearch } from '@/lib/ai/web-search';
 import { findRelevantContent } from '@/lib/ai/embedding';
+import { ChatHistoryService } from '@/lib/chat/history-service';
+import { getUser } from '@/lib/db/queries';
+import { getGlobalSyncService } from '@/lib/chat/sync-service';
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
+
+const chatHistoryService = new ChatHistoryService();
 
 // Simple language detection based on Chinese characters
 function detectLanguageFromMessages(messages: Message[]): string {
@@ -24,9 +29,23 @@ export async function POST(req: Request) {
     console.log('Chat API: Received request');
     const body = await req.json();
     console.log('Full request body:', JSON.stringify(body, null, 2));
-    const { messages, language }: { messages: Message[]; language?: string } = body;
+    const { messages, language, conversationId }: { 
+      messages: Message[]; 
+      language?: string;
+      conversationId?: number;
+    } = body;
     console.log('Chat API: Messages received:', messages.length);
     console.log('Chat API: Language preference:', language);
+    console.log('Chat API: Conversation ID:', conversationId);
+
+    // Get authenticated user
+    const user = await getUser();
+    if (!user) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    // Ensure sync service is running
+    getGlobalSyncService();
 
   // check if user has sent a PDF
   const messagesHavePDF = messages.some(message =>
@@ -38,6 +57,40 @@ export async function POST(req: Request) {
   // Detect language from messages if not provided
   const detectedLanguage = language || detectLanguageFromMessages(messages);
   console.log('Chat API: Using language:', detectedLanguage);
+
+  // Handle conversation persistence
+  let currentConversationId = conversationId;
+  
+  // If no conversation ID provided and we have messages, create a new conversation
+  if (!currentConversationId && messages.length > 0) {
+    try {
+      const conversation = await chatHistoryService.createConversation(
+        user.id,
+        undefined, // teamId - can be added later for team features
+        detectedLanguage
+      );
+      currentConversationId = conversation.id;
+      console.log('Created new conversation:', currentConversationId);
+    } catch (error) {
+      console.error('Failed to create conversation:', error);
+      // Continue without persistence rather than failing the chat
+    }
+  }
+
+  // Store user message optimistically if we have a conversation
+  const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+  if (currentConversationId && lastUserMessage) {
+    try {
+      await chatHistoryService.addMessage(currentConversationId, {
+        role: lastUserMessage.role,
+        content: lastUserMessage.content,
+        attachments: lastUserMessage.experimental_attachments,
+        metadata: { timestamp: new Date() }
+      }, true); // optimistic = true for fast response
+    } catch (error) {
+      console.error('Failed to store user message:', error);
+    }
+  }
 
   const result = streamText({
     model: messagesHavePDF
@@ -107,10 +160,37 @@ export async function POST(req: Request) {
         execute: async ({ question }) => findRelevantContent(question),
       }),
     },
+    onFinish: async (result) => {
+      // Store assistant's response after completion
+      if (currentConversationId && result.text) {
+        try {
+          await chatHistoryService.addMessage(currentConversationId, {
+            role: 'assistant',
+            content: result.text,
+            toolInvocations: result.toolCalls,
+            metadata: { 
+              timestamp: new Date(),
+              usage: result.usage,
+              finishReason: result.finishReason
+            }
+          }, true); // optimistic = true
+          console.log('Stored assistant response for conversation:', currentConversationId);
+        } catch (error) {
+          console.error('Failed to store assistant response:', error);
+        }
+      }
+    }
   });
 
     console.log('Chat API: Streaming response started');
-    return result.toDataStreamResponse();
+    
+    // Add conversation ID to the response headers for client tracking
+    const response = result.toDataStreamResponse();
+    if (currentConversationId) {
+      response.headers.set('X-Conversation-Id', currentConversationId.toString());
+    }
+    
+    return response;
   } catch (error) {
     console.error('Chat API Error:', error);
     return new Response(

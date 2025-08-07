@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { use, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
-import { ShoppingCart, Home, MessageCircle, LogOut } from 'lucide-react';
+import { ShoppingCart, Home, MessageCircle, LogOut, History } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,6 +71,12 @@ function UserMenu() {
             <span>Chat with Guru</span>
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer">
+          <Link href="/chat-history" className="flex w-full items-center">
+            <History className="mr-2 h-4 w-4" />
+            <span>Chat History</span>
+          </Link>
+        </DropdownMenuItem>
         <form action={handleSignOut} className="w-full">
           <button type="submit" className="flex w-full">
             <DropdownMenuItem className="w-full flex-1 cursor-pointer">
@@ -99,6 +105,13 @@ function Header() {
           >
             <MessageCircle className="h-4 w-4" />
             Chat with Guru
+          </Link>
+          <Link 
+            href="/chat-history"
+            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-orange-500 transition-colors"
+          >
+            <History className="h-4 w-4" />
+            History
           </Link>
           <Suspense fallback={<div className="h-9" />}>
             <UserMenu />
