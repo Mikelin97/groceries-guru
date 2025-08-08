@@ -415,20 +415,83 @@ function ChatContent() {
 
                     {/* File Attachments */}
                     {message?.experimental_attachments?.map((attachment, index) => (
-                      <div key={`${message.id}-${index}`} className="mt-2">
+                      <div key={`${message.id}-${index}`} className="mt-3">
                         {attachment.contentType?.startsWith('image/') ? (
-                          <Image
-                            src={attachment.url}
-                            width={300}
-                            height={200}
-                            alt={attachment.name ?? `attachment-${index}`}
-                            className="rounded-lg"
-                          />
-                        ) : attachment.contentType?.startsWith('application/pdf') ? (
-                          <div className="bg-white/10 backdrop-blur rounded-lg p-3">
-                            <p className="text-sm">📄 {attachment.name}</p>
+                          <div className="relative group">
+                            {attachment.s3Error ? (
+                              <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
+                                <div className="text-red-500 text-sm mb-2">⚠️ Image unavailable</div>
+                                <div className="text-gray-600 text-xs">
+                                  {attachment.name || 'Image'} • {attachment.s3Error}
+                                </div>
+                              </div>
+                            ) : attachment.url ? (
+                              <div className="max-w-sm">
+                                <Image
+                                  src={attachment.url}
+                                  width={400}
+                                  height={300}
+                                  alt={attachment.name ?? `attachment-${index}`}
+                                  className="rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                  style={{ objectFit: 'cover' }}
+                                />
+                                <div className="text-xs text-gray-500 mt-1 px-1">
+                                  {attachment.name}
+                                  {attachment.uploadStatus === 'failed' && (
+                                    <span className="text-red-500 ml-2">• Upload failed</span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
+                                <div className="text-gray-500 text-sm">📷 Processing image...</div>
+                              </div>
+                            )}
                           </div>
-                        ) : null}
+                        ) : attachment.contentType?.startsWith('application/pdf') ? (
+                          <div className={`${message.role === 'user' ? 'bg-white/10 backdrop-blur' : 'bg-gray-50 border border-gray-200'} rounded-lg p-3 max-w-sm`}>
+                            {attachment.s3Error ? (
+                              <div className="text-center">
+                                <div className="text-red-500 text-sm mb-1">⚠️ PDF unavailable</div>
+                                <div className="text-gray-600 text-xs">{attachment.s3Error}</div>
+                              </div>
+                            ) : attachment.url ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex-shrink-0">
+                                  <div className="w-10 h-10 rounded bg-red-100 flex items-center justify-center">
+                                    <span className="text-red-600 text-lg">📄</span>
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className={`font-medium text-sm ${message.role === 'user' ? 'text-white' : 'text-gray-900'} truncate`}>
+                                    {attachment.name || 'Document.pdf'}
+                                  </div>
+                                  <a
+                                    href={attachment.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`text-xs ${message.role === 'user' ? 'text-white/80 hover:text-white' : 'text-blue-600 hover:text-blue-800'} hover:underline`}
+                                  >
+                                    Open PDF
+                                  </a>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <div className="text-gray-500 text-sm">📄 Processing PDF...</div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className={`${message.role === 'user' ? 'bg-white/10 backdrop-blur' : 'bg-gray-50 border border-gray-200'} rounded-lg p-3 max-w-sm`}>
+                            <div className="text-sm">
+                              📎 {attachment.name || 'Unknown file'}
+                              {attachment.uploadStatus === 'failed' && (
+                                <span className="text-red-500 ml-2">• Upload failed</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

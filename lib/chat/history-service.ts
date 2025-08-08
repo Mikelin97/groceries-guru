@@ -4,6 +4,7 @@ import { conversations, messages, NewConversation, NewMessage, Conversation, Mes
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { withRetry, withCircuitBreaker, RetryableError, NonRetryableError, isTransientError } from './error-handler';
+import { getSignedUrlForFile } from '@/lib/storage/s3-service';
 
 export interface ChatMessage {
   id?: string;
@@ -29,6 +30,42 @@ export interface ConversationSummary {
 
 export class ChatHistoryService {
   private redis = getRedisClient();
+
+  /**
+   * Processes attachments and generates fresh S3 URLs for stored files
+   */
+  private async processAttachments(attachments: any[] | undefined): Promise<any[] | undefined> {
+    if (!attachments || attachments.length === 0) return attachments;
+
+    return await Promise.all(
+      attachments.map(async (attachment) => {
+        // If attachment has S3 key, generate fresh signed URL
+        if (attachment.s3Key && attachment.uploadStatus === 'completed') {
+          try {
+            console.log('Generating fresh S3 URL for:', attachment.s3Key);
+            const freshUrl = await getSignedUrlForFile(attachment.s3Key, 86400); // 24 hours
+            
+            return {
+              ...attachment,
+              url: freshUrl, // Update with fresh signed URL
+            };
+          } catch (s3Error) {
+            console.error('Failed to generate fresh S3 URL:', s3Error);
+            
+            // Return attachment with error indication but keep metadata
+            return {
+              ...attachment,
+              url: null, // Clear expired URL
+              s3Error: 'Unable to access file', // Add error indicator
+            };
+          }
+        }
+        
+        // Return attachment as-is if no S3 processing needed
+        return attachment;
+      })
+    );
+  }
 
   async createConversation(
     userId: number, 
@@ -260,14 +297,22 @@ export class ChatHistoryService {
           .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
         if (parsedMessages.length > 0) {
-          console.log(`🔴 Redis: Retrieved ${parsedMessages.length} messages from Redis for conversation ${conversationId}`);
-          console.log('🔴 Redis messages:', parsedMessages.map(m => ({ 
+          // Process attachments to generate fresh S3 URLs
+          const messagesWithFreshUrls = await Promise.all(
+            parsedMessages.map(async (msg) => ({
+              ...msg,
+              attachments: await this.processAttachments(msg.attachments)
+            }))
+          );
+
+          console.log(`🔴 Redis: Retrieved ${messagesWithFreshUrls.length} messages from Redis for conversation ${conversationId}`);
+          console.log('🔴 Redis messages:', messagesWithFreshUrls.map(m => ({ 
             id: m.id, 
             tempId: m.tempId, 
             role: m.role, 
             content: m.content.substring(0, 30) + '...' 
           })));
-          return parsedMessages;
+          return messagesWithFreshUrls;
         }
       }
 
@@ -283,16 +328,20 @@ export class ChatHistoryService {
         )
         .orderBy(messages.createdAt);
 
-      const formattedMessages: ChatMessage[] = dbMessages.map(row => ({
-        id: row.messages.id.toString(),
-        role: row.messages.role as 'user' | 'assistant' | 'system',
-        content: row.messages.content,
-        attachments: row.messages.attachments ? JSON.parse(row.messages.attachments) : undefined,
-        toolInvocations: row.messages.toolInvocations ? JSON.parse(row.messages.toolInvocations) : undefined,
-        metadata: row.messages.metadata ? JSON.parse(row.messages.metadata) : undefined,
-        createdAt: row.messages.createdAt,
-        conversationId: row.messages.conversationId,
-      }));
+      const formattedMessages: ChatMessage[] = await Promise.all(
+        dbMessages.map(async (row) => ({
+          id: row.messages.id.toString(),
+          role: row.messages.role as 'user' | 'assistant' | 'system',
+          content: row.messages.content,
+          attachments: await this.processAttachments(
+            row.messages.attachments ? JSON.parse(row.messages.attachments) : undefined
+          ),
+          toolInvocations: row.messages.toolInvocations ? JSON.parse(row.messages.toolInvocations) : undefined,
+          metadata: row.messages.metadata ? JSON.parse(row.messages.metadata) : undefined,
+          createdAt: row.messages.createdAt,
+          conversationId: row.messages.conversationId,
+        }))
+      );
 
       console.log(`🔵 PostgreSQL: Retrieved ${formattedMessages.length} messages from database for conversation ${conversationId}`);
       console.log('🔵 Database messages:', formattedMessages.map(m => ({ 
@@ -301,10 +350,21 @@ export class ChatHistoryService {
         content: m.content.substring(0, 30) + '...' 
       })));
 
-      // Update cache with database data
+      // Update cache with database data (but not with processed S3 URLs as they expire)
       if (formattedMessages.length > 0) {
         await redis.del(cacheKey);
-        const messageStrings = formattedMessages
+        const messagesForCache = dbMessages.map(row => ({
+          id: row.messages.id.toString(),
+          role: row.messages.role,
+          content: row.messages.content,
+          attachments: row.messages.attachments ? JSON.parse(row.messages.attachments) : undefined,
+          toolInvocations: row.messages.toolInvocations ? JSON.parse(row.messages.toolInvocations) : undefined,
+          metadata: row.messages.metadata ? JSON.parse(row.messages.metadata) : undefined,
+          createdAt: row.messages.createdAt,
+          conversationId: row.messages.conversationId,
+        }));
+        
+        const messageStrings = messagesForCache
           .slice(-CHAT_CONFIG.MESSAGE_BUFFER_SIZE)
           .reverse()
           .map(msg => JSON.stringify(msg));
@@ -331,16 +391,20 @@ export class ChatHistoryService {
         )
         .orderBy(messages.createdAt);
 
-      return dbMessages.map(row => ({
-        id: row.messages.id.toString(),
-        role: row.messages.role as 'user' | 'assistant' | 'system',
-        content: row.messages.content,
-        attachments: row.messages.attachments ? JSON.parse(row.messages.attachments) : undefined,
-        toolInvocations: row.messages.toolInvocations ? JSON.parse(row.messages.toolInvocations) : undefined,
-        metadata: row.messages.metadata ? JSON.parse(row.messages.metadata) : undefined,
-        createdAt: row.messages.createdAt,
-        conversationId: row.messages.conversationId,
-      }));
+      return await Promise.all(
+        dbMessages.map(async (row) => ({
+          id: row.messages.id.toString(),
+          role: row.messages.role as 'user' | 'assistant' | 'system',
+          content: row.messages.content,
+          attachments: await this.processAttachments(
+            row.messages.attachments ? JSON.parse(row.messages.attachments) : undefined
+          ),
+          toolInvocations: row.messages.toolInvocations ? JSON.parse(row.messages.toolInvocations) : undefined,
+          metadata: row.messages.metadata ? JSON.parse(row.messages.metadata) : undefined,
+          createdAt: row.messages.createdAt,
+          conversationId: row.messages.conversationId,
+        }))
+      );
     }
   }
 
