@@ -24,16 +24,23 @@ The application now supports uploading images and PDFs as attachments in chat co
 
 ### File Storage Structure
 
-Files are organized in S3 with this structure:
+Files are organized in S3 with this human-readable structure:
 ```
-/{userId}/{year}/{month}/{day}/{conversationId?}/readable-filename-{uuid}.{ext}
+/user-{userId}/{year-month-day}/chat-{conversationId|uploads}/{filename-timestamp}.{ext}
 ```
 
-Example:
+Examples:
 ```
-/123/2025/01/15/456/my-grocery-list-a1b2c3.pdf
-/123/2025/01/15/product-photo-d4e5f6.jpg
+/user-123/2025-08-08/chat-456/my-grocery-list-1430.pdf
+/user-123/2025-08-08/uploads/product-photo-0925.jpg
+/user-456/2025-08-08/chat-789/recipe-screenshot-1145.png
 ```
+
+**Naming Benefits:**
+- **User folders**: `user-123` clearly identifies file ownership
+- **Date organization**: `2025-08-08` makes files easy to find by date
+- **Context clarity**: `chat-456` vs `uploads` shows file source
+- **Readable names**: Original filename preserved with timestamp for uniqueness
 
 ## Setup Instructions
 
@@ -128,14 +135,17 @@ File metadata is stored in the `messages.attachments` JSON column:
 {
   "name": "product-photo.jpg",
   "contentType": "image/jpeg",
-  "url": "https://signed-s3-url...",
   "s3Key": "123/2025/01/15/456/product-photo-a1b2c3.jpg",
-  "s3Bucket": "groceries-guru-attachments",
-  "s3Region": "us-west-2",
   "uploadStatus": "completed",
   "uploadedAt": "2025-01-15T10:30:00.000Z"
 }
 ```
+
+**Security Note**: 
+- Only the S3 key is stored in the database - no URLs or sensitive information
+- Signed URLs are generated fresh at runtime when needed
+- Bucket name, region, and AWS credentials come from environment variables
+- URLs are never persisted to avoid exposing signed credentials
 
 ## API Endpoints
 

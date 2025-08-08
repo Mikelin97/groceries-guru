@@ -115,8 +115,19 @@ export class ChatHistoryService {
       return await withRetry(async () => {
         try {
           const redis = await this.redis;
+          
+          // Clean attachments - remove URLs for storage, keep S3 keys only
+          const cleanedAttachments = message.attachments?.map(attachment => {
+            if (attachment.s3Key) {
+              const { url, ...attachmentWithoutUrl } = attachment;
+              return attachmentWithoutUrl;
+            }
+            return attachment;
+          });
+          
           const tempMessage = {
             ...message,
+            attachments: cleanedAttachments,
             tempId,
             createdAt: new Date(),
             conversationId,
@@ -216,12 +227,21 @@ export class ChatHistoryService {
         // Direct database insert with retry logic
         return await withRetry(async () => {
           try {
+            // Clean attachments - remove URLs for storage, keep S3 keys only
+            const cleanedAttachments = message.attachments?.map(attachment => {
+              if (attachment.s3Key) {
+                const { url, ...attachmentWithoutUrl } = attachment;
+                return attachmentWithoutUrl;
+              }
+              return attachment;
+            });
+            
             const [dbMessage] = await db.insert(messages)
               .values({
                 conversationId,
                 role: message.role,
                 content: message.content,
-                attachments: message.attachments ? JSON.stringify(message.attachments) : null,
+                attachments: cleanedAttachments ? JSON.stringify(cleanedAttachments) : null,
                 toolInvocations: message.toolInvocations ? JSON.stringify(message.toolInvocations) : null,
                 metadata: message.metadata ? JSON.stringify(message.metadata) : null,
                 createdAt: new Date(),
@@ -497,12 +517,21 @@ export class ChatHistoryService {
       // Save each message to PostgreSQL
       for (const message of parsedMessages) {
         try {
+          // Clean attachments - remove URLs for storage, keep S3 keys only
+          const cleanedAttachments = message.attachments?.map(attachment => {
+            if (attachment.s3Key) {
+              const { url, ...attachmentWithoutUrl } = attachment;
+              return attachmentWithoutUrl;
+            }
+            return attachment;
+          });
+          
           await db.insert(messages)
             .values({
               conversationId,
               role: message.role,
               content: message.content,
-              attachments: message.attachments ? JSON.stringify(message.attachments) : null,
+              attachments: cleanedAttachments ? JSON.stringify(cleanedAttachments) : null,
               toolInvocations: message.toolInvocations ? JSON.stringify(message.toolInvocations) : null,
               metadata: message.metadata ? JSON.stringify(message.metadata) : null,
               createdAt: new Date(message.createdAt),
@@ -558,13 +587,22 @@ export class ChatHistoryService {
           if (syncData.action === 'add_message') {
             const { conversationId, message, tempId } = syncData;
 
+            // Clean attachments - remove URLs for storage, keep S3 keys only
+            const cleanedAttachments = message.attachments?.map(attachment => {
+              if (attachment.s3Key) {
+                const { url, ...attachmentWithoutUrl } = attachment;
+                return attachmentWithoutUrl;
+              }
+              return attachment;
+            });
+
             // Insert into database
             const [dbMessage] = await db.insert(messages)
               .values({
                 conversationId,
                 role: message.role,
                 content: message.content,
-                attachments: message.attachments ? JSON.stringify(message.attachments) : null,
+                attachments: cleanedAttachments ? JSON.stringify(cleanedAttachments) : null,
                 toolInvocations: message.toolInvocations ? JSON.stringify(message.toolInvocations) : null,
                 metadata: message.metadata ? JSON.stringify(message.metadata) : null,
                 createdAt: message.createdAt,

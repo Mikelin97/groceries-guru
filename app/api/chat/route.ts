@@ -67,14 +67,11 @@ export async function POST(req: Request) {
                   
                   console.log('File uploaded to S3:', uploadResult.key);
                   
-                  // Return updated attachment with S3 metadata
+                  // Return updated attachment with minimal S3 metadata (no sensitive info)
                   return {
                     ...attachment,
-                    url: uploadResult.url, // Signed URL for immediate use
-                    s3Key: uploadResult.key,
-                    s3Bucket: process.env.S3_BUCKET_NAME,
-                    s3Region: process.env.AWS_REGION,
-                    publicUrl: uploadResult.publicUrl,
+                    url: uploadResult.url, // Signed URL for immediate AI processing only
+                    s3Key: uploadResult.key, // Only store the S3 key - URL generated at runtime
                     uploadStatus: 'completed',
                     uploadedAt: new Date().toISOString(),
                   };

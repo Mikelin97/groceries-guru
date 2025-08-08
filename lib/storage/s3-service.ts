@@ -15,7 +15,6 @@ const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'groceries-guru-attachments';
 export interface UploadResult {
   key: string;
   url: string;
-  publicUrl: string;
   fileName: string;
   contentType: string;
   size: number;
@@ -42,6 +41,8 @@ function generateS3Key(
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
+  const hour = String(now.getHours()).padStart(2, '0');
+  const minute = String(now.getMinutes()).padStart(2, '0');
   
   // Create human-readable filename
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
@@ -50,13 +51,17 @@ function generateS3Key(
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '-')
     .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+    .replace(/^-|-$/g, '')
+    .substring(0, 50); // Limit length for readability
   
-  const uuid = uuidv4().split('-')[0];
-  const readableFileName = `${sanitizedBaseName}-${uuid}`;
+  // Use timestamp instead of UUID for better readability
+  const timestamp = `${hour}${minute}`;
+  const readableFileName = sanitizedBaseName 
+    ? `${sanitizedBaseName}-${timestamp}` 
+    : `attachment-${timestamp}`;
   
-  const basePath = `${userId}/${year}/${month}/${day}`;
-  const conversationPath = conversationId ? `/${conversationId}` : '';
+  const basePath = `user-${userId}/${year}-${month}-${day}`;
+  const conversationPath = conversationId ? `/chat-${conversationId}` : '/uploads';
   
   return `${basePath}${conversationPath}/${readableFileName}.${fileExtension}`;
 }
@@ -100,12 +105,9 @@ export async function uploadFileToS3(
         expiresIn: 86400 // 24 hours
       });
       
-      const publicUrl = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-west-2'}.amazonaws.com/${s3Key}`;
-      
       return {
         key: s3Key,
         url: signedUrl,
-        publicUrl,
         fileName: file.name,
         contentType: file.type,
         size: file.size,
@@ -150,18 +152,29 @@ export async function getSignedUrlForFile(s3Key: string, expiresIn: number = 360
  */
 export function parseS3Key(s3Key: string) {
   const parts = s3Key.split('/');
-  if (parts.length < 4) return null;
+  if (parts.length < 3) return null;
   
-  const [userId, year, month, day, ...rest] = parts;
-  const fileName = rest[rest.length - 1];
-  const conversationId = rest.length > 1 ? parseInt(rest[0]) : undefined;
+  // Parse: user-{userId}/{year-month-day}/chat-{conversationId|uploads}/{filename-timestamp}.ext
+  const userPart = parts[0]; // user-123
+  const datePart = parts[1]; // 2025-08-08
+  const contextPart = parts[2]; // chat-456 or uploads
+  const fileName = parts[3]; // filename-timestamp.ext
+  
+  const userId = userPart.replace('user-', '');
+  const [year, month, day] = datePart.split('-').map(Number);
+  
+  let conversationId: number | undefined;
+  if (contextPart.startsWith('chat-')) {
+    conversationId = parseInt(contextPart.replace('chat-', ''));
+  }
   
   return {
     userId,
-    year: parseInt(year),
-    month: parseInt(month),
-    day: parseInt(day),
+    year,
+    month,
+    day,
     conversationId,
     fileName,
+    isFromChat: contextPart.startsWith('chat-'),
   };
 }
