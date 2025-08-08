@@ -11,7 +11,24 @@ const nextConfig: NextConfig = {
   productionBrowserSourceMaps: false,
   // Skip build-time data fetching
   trailingSlash: false,
-  skipTrailingSlashRedirect: true
+  skipTrailingSlashRedirect: true,
+  // Configure external image domains
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.s3.us-west-2.amazonaws.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'groceries-guru-attachments.s3.us-west-2.amazonaws.com',
+        port: '',
+        pathname: '/**',
+      }
+    ],
+  },
 };
 
 export default nextConfig;

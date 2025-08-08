@@ -22,6 +22,7 @@ function ChatContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [initialMessages, setInitialMessages] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [sessionId] = useState(`session-${Date.now()}-${Math.random().toString(36).substring(2)}`);
   const { t, language } = useLanguage();
   const searchParams = useSearchParams();
 
@@ -42,6 +43,10 @@ function ChatContent() {
 
   const loadConversationHistory = async (convId: number) => {
     setIsLoadingHistory(true);
+    
+    // Clear initial messages first to prevent duplication
+    setInitialMessages([]);
+    
     try {
       const response = await fetch(`/api/chat-history?conversationId=${convId}`);
       const data = await response.json();
@@ -57,8 +62,9 @@ function ChatContent() {
           toolInvocations: msg.toolInvocations,
         }));
         
+        console.log(`📥 Loading ${formattedMessages.length} messages for conversation ${convId}`);
         setInitialMessages(formattedMessages);
-        console.log(`✅ Loaded ${formattedMessages.length} messages for conversation ${convId}:`, formattedMessages.map((m: any) => ({ role: m.role, content: m.content.substring(0, 50) + '...' })));
+        console.log('✅ Initial messages set:', formattedMessages.map((m: any) => ({ id: m.id, role: m.role, content: m.content.substring(0, 30) + '...' })));
       } else {
         console.log(`No messages found for conversation ${convId}`);
         setInitialMessages([]);
@@ -100,7 +106,7 @@ function ChatContent() {
   }, [conversationId, isSaving]);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
-    key: `${useSimpleChat ? 'simple-chat' : 'full-chat'}-${language}-${conversationId}`, // Force re-initialization when language or conversation changes
+    key: `${useSimpleChat ? 'simple-chat' : 'full-chat'}-${language}-${conversationId || 'new'}`, // Force re-initialization when conversation changes
     api: useSimpleChat ? '/api/chat-simple' : '/api/chat',
     ...(useSimpleChat ? {} : { maxSteps: 5 }),
     initialMessages: initialMessages,
@@ -123,6 +129,16 @@ function ChatContent() {
       }
     }
   });
+
+  // Debug: Monitor messages state changes
+  useEffect(() => {
+    console.log('🔍 Messages state changed:', {
+      messageCount: messages.length,
+      conversationId,
+      initialMessageCount: initialMessages.length,
+      messages: messages.map(m => ({ id: m.id, role: m.role, content: m.content.substring(0, 30) + '...' }))
+    });
+  }, [messages, conversationId, initialMessages.length]);
 
   // Auto-save when user navigates away or closes tab
   useEffect(() => {
@@ -456,7 +472,7 @@ function ChatContent() {
               console.log('API endpoint:', useSimpleChat ? '/api/chat-simple' : '/api/chat');
               
               handleSubmit(e, {
-                experimental_attachments: files,
+                experimental_attachments: files
               });
               setFiles(undefined);
             }}
@@ -464,6 +480,8 @@ function ChatContent() {
             onImageUpload={handleImageUpload}
             onFilesChange={setFiles}
             isRecording={isRecording}
+            conversationId={conversationId}
+            sessionId={sessionId}
           />
         </div>
       </div>

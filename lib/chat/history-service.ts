@@ -260,7 +260,13 @@ export class ChatHistoryService {
           .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
         if (parsedMessages.length > 0) {
-          console.log(`Retrieved ${parsedMessages.length} messages from Redis for conversation ${conversationId}`);
+          console.log(`🔴 Redis: Retrieved ${parsedMessages.length} messages from Redis for conversation ${conversationId}`);
+          console.log('🔴 Redis messages:', parsedMessages.map(m => ({ 
+            id: m.id, 
+            tempId: m.tempId, 
+            role: m.role, 
+            content: m.content.substring(0, 30) + '...' 
+          })));
           return parsedMessages;
         }
       }
@@ -287,6 +293,13 @@ export class ChatHistoryService {
         createdAt: row.messages.createdAt,
         conversationId: row.messages.conversationId,
       }));
+
+      console.log(`🔵 PostgreSQL: Retrieved ${formattedMessages.length} messages from database for conversation ${conversationId}`);
+      console.log('🔵 Database messages:', formattedMessages.map(m => ({ 
+        id: m.id, 
+        role: m.role, 
+        content: m.content.substring(0, 30) + '...' 
+      })));
 
       // Update cache with database data
       if (formattedMessages.length > 0) {

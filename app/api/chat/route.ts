@@ -140,7 +140,7 @@ export async function POST(req: Request) {
     - Be transparent about your limitations and always prioritize user safety
 
     Remember: You're here to make grocery shopping easier and more informed for every user!`,
-    messages,
+      messages,
     tools: {
       webSearch: tool({
         description: `Search the web for current grocery product information, prices, availability, recalls, or new product launches. Use this for up-to-date information not in your knowledge base.`,

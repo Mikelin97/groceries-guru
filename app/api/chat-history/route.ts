@@ -23,6 +23,15 @@ export async function GET(request: NextRequest) {
         true // Include temporary messages for frontend display
       );
 
+      console.log(`📚 Chat history API returning ${messages.length} messages for conversation ${conversationId}`);
+      console.log('📚 Message details:', messages.map(m => ({ 
+        id: m.id, 
+        tempId: m.tempId, 
+        role: m.role, 
+        content: m.content.substring(0, 30) + '...',
+        source: m.id ? 'db' : 'redis' 
+      })));
+
       return NextResponse.json({
         success: true,
         messages,

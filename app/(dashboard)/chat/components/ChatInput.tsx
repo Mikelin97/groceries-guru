@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Send, Mic, Camera, Shield } from 'lucide-react';
+import { Send, Mic, Camera, Shield, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import Image from 'next/image';
@@ -15,6 +15,8 @@ interface ChatInputProps {
   onImageUpload: () => void;
   onFilesChange: (files: FileList | undefined) => void;
   isRecording: boolean;
+  conversationId?: number | null;
+  sessionId?: string;
 }
 
 export const ChatInput = ({
@@ -27,7 +29,9 @@ export const ChatInput = ({
   onVoiceToggle,
   onImageUpload,
   onFilesChange,
-  isRecording
+  isRecording,
+  conversationId,
+  sessionId
 }: ChatInputProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showVoiceInfo, setShowVoiceInfo] = useState(false);
@@ -44,8 +48,9 @@ export const ChatInput = ({
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files.length > 0) {
+      // Simple approach - just pass files to parent component
       onFilesChange(event.target.files);
     }
   };
