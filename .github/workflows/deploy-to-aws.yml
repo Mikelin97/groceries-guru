@@ -3,6 +3,8 @@ name: Deploy to AWS ECS
 on:
   push:
     branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
   workflow_dispatch: # Allow manual trigger
 
 env:
@@ -14,10 +16,42 @@ env:
   CONTAINER_NAME: groceries-guru
 
 jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linting
+      run: npm run test:lint
+
+    - name: Build application
+      run: npm run build
+
+    - name: Build Docker image (validation)
+      run: |
+        echo "🔍 Building Docker image for validation..."
+        docker build -t groceries-guru:${{ github.sha }} .
+        echo "✅ Docker image built successfully"
+
   deploy:
     name: Deploy to AWS
     runs-on: ubuntu-latest
     environment: development
+    needs: build-and-test
+    # Deploy when code is pushed to dev branch (including PR merges)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
 
     steps:
     - name: Checkout code
@@ -41,7 +75,7 @@ jobs:
         IMAGE_TAG: ${{ github.sha }}
       run: |
         # Build a docker container and push it to ECR
-        echo "Building Docker image..."
+        echo "🚀 Building and pushing Docker image for deployment..."
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
         
