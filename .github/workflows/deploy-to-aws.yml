@@ -104,9 +104,28 @@ jobs:
         
         # Create a temporary task definition for migrations
         MIGRATION_TASK_DEF=$(cat task-definition.json | jq --arg IMAGE "$IMAGE_URI" '
-          .containerDefinitions[0].image = $IMAGE |
-          .containerDefinitions[0].command = ["npm", "run", "db:migrate:run"] |
-          .family = "groceries-guru-migration"
+          {
+            family: "groceries-guru-migration",
+            taskRoleArn: .taskRoleArn,
+            executionRoleArn: .executionRoleArn,
+            networkMode: .networkMode,
+            requiresCompatibilities: .requiresCompatibilities,
+            cpu: .cpu,
+            memory: .memory,
+            containerDefinitions: [
+              (.containerDefinitions[0] | {
+                name: .name,
+                image: $IMAGE,
+                command: ["npm", "run", "db:migrate:run"],
+                essential: .essential,
+                logConfiguration: .logConfiguration,
+                environment: .environment,
+                secrets: .secrets,
+                portMappings: [],
+                healthCheck: (.healthCheck // null)
+              })
+            ]
+          }
         ')
         
         # Register the migration task definition
