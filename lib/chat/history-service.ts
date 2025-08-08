@@ -1,4 +1,5 @@
 import { getRedisClient, CHAT_KEYS, CHAT_CONFIG } from '@/lib/db/redis';
+import { RedisClientType } from 'redis';
 import { db } from '@/lib/db/drizzle';
 import { conversations, messages, Conversation } from '@/lib/db/schema';
 import { eq, desc, and, sql } from 'drizzle-orm';
@@ -29,7 +30,14 @@ export interface ConversationSummary {
 }
 
 export class ChatHistoryService {
-  private redis = getRedisClient();
+  private redisClient: Promise<RedisClientType> | null = null;
+
+  private getRedis(): Promise<RedisClientType> {
+    if (!this.redisClient) {
+      this.redisClient = getRedisClient();
+    }
+    return this.redisClient;
+  }
 
   /**
    * Processes attachments and generates fresh S3 URLs for stored files
@@ -89,7 +97,7 @@ export class ChatHistoryService {
       .returning();
 
     // Cache the conversation summary for quick access
-    const redis = await this.redis;
+    const redis = await this.getRedis();
     await redis.zAdd(
       CHAT_KEYS.conversationList(userId),
       { score: Date.now(), value: JSON.stringify(conversation) }
@@ -115,7 +123,7 @@ export class ChatHistoryService {
     return await withCircuitBreaker(async () => {
       return await withRetry(async () => {
         try {
-          const redis = await this.redis;
+          const redis = await this.getRedis();
           
           // Clean attachments - remove URLs for storage, keep S3 keys only
           const cleanedAttachments = message.attachments?.map((attachment: unknown) => {
@@ -180,7 +188,7 @@ export class ChatHistoryService {
       if (optimistic) {
         return await withRetry(async () => {
           try {
-            const redis = await this.redis;
+            const redis = await this.getRedis();
             const tempMessage = {
               ...message,
               tempId,
@@ -265,7 +273,7 @@ export class ChatHistoryService {
 
             // Update Redis cache (with fallback on Redis failure)
             try {
-              const redis = await this.redis;
+              const redis = await this.getRedis();
               await redis.lPush(
                 CHAT_KEYS.recentMessages(conversationId),
                 JSON.stringify({
@@ -306,7 +314,7 @@ export class ChatHistoryService {
     conversationId: number,
     includeTemp: boolean = true
   ): Promise<ChatMessage[]> {
-    const redis = await this.redis;
+    const redis = await this.getRedis();
     const cacheKey = CHAT_KEYS.recentMessages(conversationId);
 
     try {
@@ -429,7 +437,7 @@ export class ChatHistoryService {
   }
 
   async getUserConversations(_userId: number, limit: number = 20): Promise<ConversationSummary[]> {
-    const redis = await this.redis;
+    const redis = await this.getRedis();
     const cacheKey = CHAT_KEYS.conversationList(_userId);
 
     try {
@@ -495,7 +503,7 @@ export class ChatHistoryService {
     conversationId: number
   ): Promise<{ success: boolean; messagesSaved: number; error?: string }> {
     try {
-      const redis = await this.redis;
+      const redis = await this.getRedis();
       const cacheKey = CHAT_KEYS.recentMessages(conversationId);
       
       // First, check what's already in the database to avoid duplicates
@@ -604,7 +612,7 @@ export class ChatHistoryService {
   }
 
   async syncPendingMessages(): Promise<{ processed: number; errors: number }> {
-    const redis = await this.redis;
+    const redis = await this.getRedis();
     let processed = 0;
     let errors = 0;
 
@@ -681,7 +689,7 @@ export class ChatHistoryService {
         .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)));
 
       // Update cache
-      const redis = await this.redis;
+      const redis = await this.getRedis();
       const cacheKey = CHAT_KEYS.conversationList(userId);
       
       // Remove old entry and add updated one
@@ -710,7 +718,7 @@ export class ChatHistoryService {
         .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)));
 
       // Clean up Redis cache
-      const redis = await this.redis;
+      const redis = await this.getRedis();
       await redis.del(CHAT_KEYS.recentMessages(conversationId));
       
       // Remove from conversation list cache
