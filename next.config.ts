@@ -2,8 +2,9 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   experimental: {
-    clientSegmentCache: true
-  },
+    clientSegmentCache: true,
+    nodeMiddleware: true
+  } as any,
   output: 'standalone',
   // Disable telemetry in production
   productionBrowserSourceMaps: false,
