@@ -2,7 +2,7 @@
 
 import { useChat } from '@ai-sdk/react';
 import { useState } from 'react';
-import { ShoppingCart, Clock, Star } from 'lucide-react';
+import { ShoppingCart, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import { ChatHeader } from './components/ChatHeader';
@@ -15,7 +15,7 @@ import { LanguageProvider, useLanguage } from '@/app/contexts/LanguageContext';
 function ChatContent() {
   const [files, setFiles] = useState<FileList | undefined>(undefined);
   const [showDebug, setShowDebug] = useState(false);
-  const [testResults, setTestResults] = useState<any>(null);
+  const [testResults, setTestResults] = useState<unknown>(null);
   const [useSimpleChat, setUseSimpleChat] = useState(false);
   const { t, language } = useLanguage();
 
@@ -39,7 +39,7 @@ function ChatContent() {
 
   // Voice input functionality
   const { isRecording, isListening, handleVoiceToggle } = useVoiceInput((text) => {
-    handleInputChange({ target: { value: text } } as any);
+    handleInputChange({ target: { value: text } } as React.ChangeEvent<HTMLInputElement>);
   }, input);
 
   // Mock product recommendations for demonstration
@@ -66,9 +66,6 @@ function ChatContent() {
     }
   ];
 
-  const handleImageUpload = () => {
-    // Will be handled by ChatInput component
-  };
 
   const testAIFunction = async (query: string, testType: 'milvus' | 'websearch' | 'both') => {
     try {
@@ -325,7 +322,6 @@ function ChatContent() {
               setFiles(undefined);
             }}
             onVoiceToggle={handleVoiceToggle}
-            onImageUpload={handleImageUpload}
             onFilesChange={setFiles}
             isRecording={isRecording}
           />

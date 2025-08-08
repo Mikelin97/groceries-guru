@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai';
+// Note: openai import was unused, removed
 
 export const maxDuration = 30;
 
@@ -28,13 +28,13 @@ export async function POST(req: Request) {
       headers: { 'Content-Type': 'application/json' }
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Transcribe API Error:', error);
     
     return new Response(
       JSON.stringify({ 
         error: 'Failed to transcribe audio',
-        details: error?.message || 'Unknown error'
+        details: (error instanceof Error ? error.message : 'Unknown error')
       }),
       { 
         status: 500,

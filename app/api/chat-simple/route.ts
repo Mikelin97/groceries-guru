@@ -1,10 +1,15 @@
 import { openai } from '@ai-sdk/openai';
 import { streamText } from 'ai';
 
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
 export const maxDuration = 30;
 
 // Simple language detection based on Chinese characters
-function detectLanguageFromMessages(messages: any[]): string {
+function detectLanguageFromMessages(messages: ChatMessage[]): string {
   const lastUserMessage = messages.filter(m => m.role === 'user').pop();
   if (!lastUserMessage?.content) return 'en';
   
@@ -44,29 +49,30 @@ export async function POST(req: Request) {
     console.log('Simple Chat: Returning stream response');
     return result.toDataStreamResponse();
     
-  } catch (error: any) {
-    console.error('Simple Chat Error Details:', {
-      name: error?.name,
-      message: error?.message,
-      status: error?.status,
-      code: error?.code,
-      type: error?.type,
-      full: error
-    });
+  } catch (error: unknown) {
+    console.error('Simple Chat Error Details:', error);
+    
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
     
     // Return detailed error information
-    const errorMessage = error?.status === 429 
+    const errorMessage = (error as { status?: number })?.status === 429 
       ? 'OpenAI API quota exceeded. Please check your billing and usage limits.'
-      : error?.message || 'Unknown error occurred';
+      : (error instanceof Error ? error.message : 'Unknown error occurred');
       
     return new Response(
       JSON.stringify({ 
         error: errorMessage,
-        status: error?.status,
-        type: error?.type || 'unknown'
+        status: (error as { status?: number })?.status,
+        type: (error as { type?: string })?.type || 'unknown'
       }),
       { 
-        status: error?.status || 500,
+        status: (error as { status?: number })?.status || 500,
         headers: { 'Content-Type': 'application/json' }
       }
     );

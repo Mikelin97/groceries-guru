@@ -148,7 +148,7 @@ const searchBailian = async (query: string): Promise<SearchResponse> => {
             rating: metadata.rating || productInfo.rating,
             score: node.score || 0
           };
-        } catch (e) {
+        } catch {
           // If metadata parsing fails, use default values
         }
       }
@@ -232,7 +232,7 @@ export const initializeCloudVectorDB = async () => {
   
   try {
     // Test the client initialization
-    const client = getBailianClient();
+    getBailianClient();
     console.log('✅ Bailian SDK client initialized successfully');
     
     // Note: Index and data management should be done through Alibaba Cloud console

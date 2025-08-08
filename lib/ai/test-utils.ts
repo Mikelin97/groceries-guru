@@ -6,7 +6,7 @@ import { initializeCloudVectorDB } from './vector-search';
 interface TestResult {
   test: string;
   passed: boolean;
-  result?: any;
+  result?: unknown;
   error?: string;
   duration: number;
 }
