@@ -305,38 +305,8 @@ export class ChatHistoryService {
     const cacheKey = CHAT_KEYS.recentMessages(conversationId);
 
     try {
-      // Try Redis first for ongoing/recent conversations
-      const cachedMessages = await redis.lRange(cacheKey, 0, -1);
-      
-      if (cachedMessages.length > 0) {
-        // Return Redis messages for ongoing chat sessions
-        const parsedMessages = cachedMessages
-          .reverse()
-          .map(msg => JSON.parse(msg))
-          .filter(msg => includeTemp || !msg.tempId) // Filter temp messages if needed
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-        if (parsedMessages.length > 0) {
-          // Process attachments to generate fresh S3 URLs
-          const messagesWithFreshUrls = await Promise.all(
-            parsedMessages.map(async (msg) => ({
-              ...msg,
-              attachments: await this.processAttachments(msg.attachments)
-            }))
-          );
-
-          console.log(`🔴 Redis: Retrieved ${messagesWithFreshUrls.length} messages from Redis for conversation ${conversationId}`);
-          console.log('🔴 Redis messages:', messagesWithFreshUrls.map(m => ({ 
-            id: m.id, 
-            tempId: m.tempId, 
-            role: m.role, 
-            content: m.content.substring(0, 30) + '...' 
-          })));
-          return messagesWithFreshUrls;
-        }
-      }
-
-      // Fallback to database for complete history
+      // Always get fresh data from database to ensure consistency
+      // Cached Redis messages are only for active chat sessions, not for loading history
       const dbMessages = await db.select()
         .from(messages)
         .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -348,30 +318,26 @@ export class ChatHistoryService {
         )
         .orderBy(messages.createdAt);
 
-      const formattedMessages: ChatMessage[] = await Promise.all(
-        dbMessages.map(async (row) => ({
-          id: row.messages.id.toString(),
-          role: row.messages.role as 'user' | 'assistant' | 'system',
-          content: row.messages.content,
-          attachments: await this.processAttachments(
-            row.messages.attachments ? JSON.parse(row.messages.attachments) : undefined
-          ),
-          toolInvocations: row.messages.toolInvocations ? JSON.parse(row.messages.toolInvocations) : undefined,
-          metadata: row.messages.metadata ? JSON.parse(row.messages.metadata) : undefined,
-          createdAt: row.messages.createdAt,
-          conversationId: row.messages.conversationId,
-        }))
-      );
+      if (dbMessages.length > 0) {
+        // Format database messages
+        const formattedMessages: ChatMessage[] = await Promise.all(
+          dbMessages.map(async (row) => ({
+            id: row.messages.id.toString(),
+            role: row.messages.role as 'user' | 'assistant' | 'system',
+            content: row.messages.content,
+            attachments: await this.processAttachments(
+              row.messages.attachments ? JSON.parse(row.messages.attachments) : undefined
+            ),
+            toolInvocations: row.messages.toolInvocations ? JSON.parse(row.messages.toolInvocations) : undefined,
+            metadata: row.messages.metadata ? JSON.parse(row.messages.metadata) : undefined,
+            createdAt: row.messages.createdAt,
+            conversationId: row.messages.conversationId,
+          }))
+        );
 
-      console.log(`🔵 PostgreSQL: Retrieved ${formattedMessages.length} messages from database for conversation ${conversationId}`);
-      console.log('🔵 Database messages:', formattedMessages.map(m => ({ 
-        id: m.id, 
-        role: m.role, 
-        content: m.content.substring(0, 30) + '...' 
-      })));
-
-      // Update cache with database data (but not with processed S3 URLs as they expire)
-      if (formattedMessages.length > 0) {
+        console.log(`🔵 PostgreSQL: Retrieved ${formattedMessages.length} messages from database for conversation ${conversationId}`);
+        
+        // Clear any stale Redis cache and update with fresh data
         await redis.del(cacheKey);
         const messagesForCache = dbMessages.map(row => ({
           id: row.messages.id.toString(),
@@ -384,6 +350,7 @@ export class ChatHistoryService {
           conversationId: row.messages.conversationId,
         }));
         
+        // Cache the most recent messages for ongoing chat
         const messageStrings = messagesForCache
           .slice(-CHAT_CONFIG.MESSAGE_BUFFER_SIZE)
           .reverse()
@@ -393,9 +360,37 @@ export class ChatHistoryService {
           await redis.lPush(cacheKey, messageStrings);
           await redis.expire(cacheKey, CHAT_CONFIG.SESSION_TTL);
         }
+
+        return formattedMessages;
       }
 
-      return formattedMessages;
+      // If no database messages, check Redis for any temporary/recent messages
+      const cachedMessages = await redis.lRange(cacheKey, 0, -1);
+      
+      if (cachedMessages.length > 0) {
+        // Return Redis messages only if no database messages exist
+        const parsedMessages = cachedMessages
+          .reverse()
+          .map(msg => JSON.parse(msg))
+          .filter(msg => includeTemp || !msg.tempId) // Filter temp messages if needed
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        // Process attachments to generate fresh S3 URLs
+        const messagesWithFreshUrls = await Promise.all(
+          parsedMessages.map(async (msg) => ({
+            ...msg,
+            attachments: await this.processAttachments(msg.attachments)
+          }))
+        );
+
+        console.log(`🔴 Redis: Retrieved ${messagesWithFreshUrls.length} temporary messages from Redis for conversation ${conversationId}`);
+        return messagesWithFreshUrls;
+      }
+
+      // No messages found in either database or cache
+      console.log(`📭 No messages found for conversation ${conversationId}`);
+      return [];
+
     } catch (error) {
       console.error('Error getting conversation history:', error);
       
@@ -499,10 +494,20 @@ export class ChatHistoryService {
       const redis = await this.redis;
       const cacheKey = CHAT_KEYS.recentMessages(conversationId);
       
+      // First, check what's already in the database to avoid duplicates
+      const existingDbMessages = await db.select()
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(messages.createdAt);
+
+      const existingMessageIds = new Set(existingDbMessages.map(m => m.id.toString()));
+      console.log(`📊 Found ${existingDbMessages.length} existing messages in database for conversation ${conversationId}`);
+
       // Get all messages from Redis for this conversation
       const cachedMessages = await redis.lRange(cacheKey, 0, -1);
       
       if (cachedMessages.length === 0) {
+        console.log(`📭 No Redis messages to save for conversation ${conversationId}`);
         return { success: true, messagesSaved: 0 };
       }
 
@@ -512,11 +517,24 @@ export class ChatHistoryService {
         .map(msg => JSON.parse(msg))
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+      console.log(`🔄 Processing ${parsedMessages.length} Redis messages for saving...`);
+
       let messagesSaved = 0;
 
-      // Save each message to PostgreSQL
+      // Save only new messages to PostgreSQL (skip ones that already have database IDs)
       for (const message of parsedMessages) {
         try {
+          // Skip messages that already have a database ID (already saved)
+          if (message.id && existingMessageIds.has(message.id)) {
+            console.log(`⏭️ Skipping already saved message with ID: ${message.id}`);
+            continue;
+          }
+
+          // Skip temporary messages that might have been processed already
+          if (message.tempId && !message.id) {
+            console.log(`💾 Saving temp message with tempId: ${message.tempId}`);
+          }
+
           // Clean attachments - remove URLs for storage, keep S3 keys only
           const cleanedAttachments = message.attachments?.map(attachment => {
             if (attachment.s3Key) {
@@ -526,7 +544,7 @@ export class ChatHistoryService {
             return attachment;
           });
           
-          await db.insert(messages)
+          const [savedMessage] = await db.insert(messages)
             .values({
               conversationId,
               role: message.role,
@@ -537,27 +555,36 @@ export class ChatHistoryService {
               createdAt: new Date(message.createdAt),
               updatedAt: new Date(),
             })
-            .onConflictDoNothing(); // In case message already exists
+            .onConflictDoNothing()
+            .returning();
 
-          messagesSaved++;
+          if (savedMessage) {
+            messagesSaved++;
+            console.log(`✅ Saved message ${savedMessage.id} to database`);
+          }
         } catch (error) {
           console.error('Error saving individual message:', error);
         }
       }
 
-      // Update conversation metadata
-      await db.update(conversations)
-        .set({
-          lastMessageAt: new Date(),
-          messageCount: messagesSaved,
-          updatedAt: new Date(),
-        })
-        .where(eq(conversations.id, conversationId));
+      // Update conversation metadata only if we actually saved messages
+      if (messagesSaved > 0) {
+        await db.update(conversations)
+          .set({
+            lastMessageAt: new Date(),
+            messageCount: existingDbMessages.length + messagesSaved,
+            updatedAt: new Date(),
+          })
+          .where(eq(conversations.id, conversationId));
 
-      // Clean up Redis cache after successful save
+        console.log(`🔄 Updated conversation ${conversationId} metadata: ${existingDbMessages.length + messagesSaved} total messages`);
+      }
+
+      // Clean up Redis cache after successful save to prevent stale data
       await redis.del(cacheKey);
+      console.log(`🧹 Cleared Redis cache for conversation ${conversationId}`);
 
-      console.log(`Saved ${messagesSaved} messages to database for conversation ${conversationId}`);
+      console.log(`✅ Saved ${messagesSaved} new messages to database for conversation ${conversationId}`);
       return { success: true, messagesSaved };
 
     } catch (error) {
