@@ -16,9 +16,12 @@ env:
   CONTAINER_NAME: groceries-guru
 
 jobs:
-  build-and-test:
-    name: Build and Test
+  build-and-push:
+    name: Build, Test & Push
     runs-on: ubuntu-latest
+
+    outputs:
+      image-uri: ${{ steps.push-image.outputs.image }}
 
     steps:
     - name: Checkout code
@@ -36,17 +39,57 @@ jobs:
     - name: Build application
       run: npm run build
 
-    - name: Build Docker image (validation)
+    - name: Build Docker image
+      env:
+        IMAGE_TAG: ${{ github.sha }}
       run: |
-        echo "🔍 Building Docker image for validation..."
-        docker build -t groceries-guru:${{ github.sha }} .
+        echo "🔨 Building Docker image..."
+        docker build -t groceries-guru:$IMAGE_TAG .
         echo "✅ Docker image built successfully"
+
+    - name: Test Docker image
+      env:
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        echo "🧪 Testing Docker image..."
+        # Test that the container starts successfully
+        docker run --rm --entrypoint="" groceries-guru:$IMAGE_TAG node --version
+        echo "✅ Docker image tested successfully"
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Tag and push image to Amazon ECR
+      id: push-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Tag the already-built image for ECR
+        echo "🏷️ Tagging image for ECR..."
+        docker tag groceries-guru:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker tag groceries-guru:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+        echo "📤 Pushing tested image to ECR..."
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "✅ Image pushed successfully: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
   deploy:
     name: Deploy to AWS
     runs-on: ubuntu-latest
     environment: development
-    needs: build-and-test
+    needs: build-and-push
     # Deploy when code is pushed to dev branch (including PR merges)
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
 
@@ -61,27 +104,6 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-
-    - name: Build, tag, and push image to Amazon ECR
-      id: build-image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }}
-      run: |
-        # Build a docker container and push it to ECR
-        echo "🚀 Building and pushing Docker image for deployment..."
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-        
-        echo "Pushing image to ECR..."
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-
     - name: Download task definition
       run: |
         aws ecs describe-task-definition \
@@ -94,11 +116,11 @@ jobs:
       with:
         task-definition: task-definition.json
         container-name: ${{ env.CONTAINER_NAME }}
-        image: ${{ steps.build-image.outputs.image }}
+        image: ${{ needs.build-and-push.outputs.image-uri }}
 
     - name: Run database migrations
       env:
-        IMAGE_URI: ${{ steps.build-image.outputs.image }}
+        IMAGE_URI: ${{ needs.build-and-push.outputs.image-uri }}
       run: |
         echo "🗄️ Running database migrations..."
         
@@ -134,11 +156,20 @@ jobs:
           --cli-input-json file://migration-task-definition.json \
           --region ${{ env.AWS_REGION }}
         
-        # Run the migration task
-        echo "Starting migration task..."
+        # Get network configuration from existing service
+        echo "Getting network configuration from existing service..."
+        SERVICE_INFO=$(aws ecs describe-services \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --services ${{ env.ECS_SERVICE }} \
+          --query 'services[0].networkConfiguration' \
+          --region ${{ env.AWS_REGION }})
+        
+        # Run the migration task with network configuration
+        echo "Starting migration task with network configuration..."
         TASK_ARN=$(aws ecs run-task \
           --cluster ${{ env.ECS_CLUSTER }} \
           --task-definition groceries-guru-migration \
+          --network-configuration "$SERVICE_INFO" \
           --query 'tasks[0].taskArn' \
           --output text \
           --region ${{ env.AWS_REGION }})
@@ -201,4 +232,4 @@ jobs:
         echo "🚀 Application is now running at: https://dev.groceriesguru.com"
         echo "📊 ECS Service: ${{ env.ECS_SERVICE }}"
         echo "🔧 ECS Cluster: ${{ env.ECS_CLUSTER }}"
-        echo "📦 Image: ${{ steps.build-image.outputs.image }}"
+        echo "📦 Image: ${{ needs.build-and-push.outputs.image-uri }}"
