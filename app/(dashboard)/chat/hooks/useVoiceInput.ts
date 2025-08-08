@@ -1,11 +1,48 @@
 import { useState, useCallback } from 'react';
 
+interface SpeechRecognitionEvent {
+  results: {
+    length: number;
+    [index: number]: {
+      [index: number]: {
+        transcript: string;
+      };
+      isFinal: boolean;
+    };
+  };
+  resultIndex: number;
+}
+
+interface SpeechRecognitionErrorEvent {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  onstart: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: new () => SpeechRecognition;
+    webkitSpeechRecognition?: new () => SpeechRecognition;
+  }
+}
+
 export const useVoiceInput = (onTranscript: (text: string) => void, currentInput?: string) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
-  const [speechRecognition, setSpeechRecognition] = useState<any>(null);
+  const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
 
   const handleVoiceToggle = useCallback(async () => {
     if (!isRecording) {
@@ -89,14 +126,17 @@ export const useVoiceInput = (onTranscript: (text: string) => void, currentInput
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
           console.log('Speech recognition available, starting...');
           
-          const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+          const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+          if (!SpeechRecognition) {
+            throw new Error('Speech recognition not supported');
+          }
           const recognition = new SpeechRecognition();
           
           recognition.continuous = true;
           recognition.interimResults = true;
           recognition.lang = 'en-US';
 
-          recognition.onresult = (event: any) => {
+          recognition.onresult = (event: SpeechRecognitionEvent) => {
             // Get only the latest result to avoid accumulating old results
             const lastResultIndex = event.results.length - 1;
             const lastResult = event.results[lastResultIndex];
@@ -132,7 +172,7 @@ export const useVoiceInput = (onTranscript: (text: string) => void, currentInput
             }
           };
           
-          recognition.onerror = (event: any) => {
+          recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
             console.error('Speech recognition error:', event.error);
             if (event.error === 'not-allowed') {
               alert('Microphone permission denied. Please allow microphone access and try again.');
@@ -150,18 +190,18 @@ export const useVoiceInput = (onTranscript: (text: string) => void, currentInput
           console.log('Speech recognition not available');
         }
 
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error accessing microphone:', error);
         
         let errorMessage = 'Unable to access microphone. ';
         
-        if (error.name === 'NotAllowedError') {
+        if (error instanceof Error && error.name === 'NotAllowedError') {
           errorMessage += 'Please allow microphone access in your browser settings and try again.';
-        } else if (error.name === 'NotFoundError') {
+        } else if (error instanceof Error && error.name === 'NotFoundError') {
           errorMessage += 'No microphone found on this device.';
-        } else if (error.name === 'NotSupportedError') {
+        } else if (error instanceof Error && error.name === 'NotSupportedError') {
           errorMessage += 'Microphone access is not supported on this device/browser.';
-        } else if (error.name === 'NotReadableError') {
+        } else if (error instanceof Error && error.name === 'NotReadableError') {
           errorMessage += 'Microphone is already in use by another application.';
         } else {
           errorMessage += 'Please check your device settings and permissions.';
@@ -184,7 +224,7 @@ export const useVoiceInput = (onTranscript: (text: string) => void, currentInput
       setIsRecording(false);
       setIsListening(false);
     }
-  }, [isRecording, mediaRecorder, speechRecognition, onTranscript]);
+  }, [isRecording, mediaRecorder, speechRecognition, onTranscript, currentInput]);
 
   return {
     isRecording,

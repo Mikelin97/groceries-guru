@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   console.log('=== SETTING TEST COOKIE ===');
   
   const cookieOptions = {

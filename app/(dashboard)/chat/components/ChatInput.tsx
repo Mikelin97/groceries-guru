@@ -1,8 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
 import { Send, Mic, Camera, Shield, X, FileText, Upload } from 'lucide-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/app/contexts/LanguageContext';
-import Image from 'next/image';
 
 interface ChatInputProps {
   input: string;
@@ -12,7 +12,6 @@ interface ChatInputProps {
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmit: (e: React.FormEvent) => void;
   onVoiceToggle: () => void;
-  onImageUpload: () => void;
   onFilesChange: (files: FileList | undefined) => void;
   isRecording: boolean;
   conversationId?: number | null;
@@ -27,7 +26,6 @@ export const ChatInput = ({
   onInputChange,
   onSubmit,
   onVoiceToggle,
-  onImageUpload,
   onFilesChange,
   isRecording,
   conversationId,

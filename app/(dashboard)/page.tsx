@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { ArrowRight, CreditCard, Database } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { GroceryGuruPreview } from './grocery-guru-preview';
 import Link from 'next/link';
 

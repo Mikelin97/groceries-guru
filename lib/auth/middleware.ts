@@ -6,15 +6,16 @@ import { redirect } from 'next/navigation';
 export type ActionState = {
   error?: string;
   success?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any; // This allows for additional properties
 };
 
-type ValidatedActionFunction<S extends z.ZodType<any, any>, T> = (
+type ValidatedActionFunction<S extends z.ZodType, T> = (
   data: z.infer<S>,
   formData: FormData
 ) => Promise<T>;
 
-export function validatedAction<S extends z.ZodType<any, any>, T>(
+export function validatedAction<S extends z.ZodType, T>(
   schema: S,
   action: ValidatedActionFunction<S, T>
 ) {
@@ -28,13 +29,13 @@ export function validatedAction<S extends z.ZodType<any, any>, T>(
   };
 }
 
-type ValidatedActionWithUserFunction<S extends z.ZodType<any, any>, T> = (
+type ValidatedActionWithUserFunction<S extends z.ZodType, T> = (
   data: z.infer<S>,
   formData: FormData,
   user: User
 ) => Promise<T>;
 
-export function validatedActionWithUser<S extends z.ZodType<any, any>, T>(
+export function validatedActionWithUser<S extends z.ZodType, T>(
   schema: S,
   action: ValidatedActionWithUserFunction<S, T>
 ) {

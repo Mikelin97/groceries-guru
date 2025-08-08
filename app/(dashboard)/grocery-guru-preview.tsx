@@ -95,7 +95,7 @@ export function GroceryGuruPreview() {
     }, 3000);
 
     return () => clearInterval(timer);
-  }, [currentMessage]);
+  }, [currentMessage, conversation.length]);
 
   return (
     <div className="w-full max-w-lg mx-auto">
