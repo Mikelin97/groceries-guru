@@ -33,7 +33,7 @@ function ChatHistoryContent() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [languageFilter, setLanguageFilter] = useState<string>('all');
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const router = useRouter();
 
   useEffect(() => {
@@ -47,7 +47,7 @@ function ChatHistoryContent() {
       const data = await response.json();
       
       if (data.success) {
-        setConversations(data.conversations.map((conv: any) => ({
+        setConversations(data.conversations.map((conv: {id: number; title?: string; language: string; lastMessageAt?: string; messageCount: number; isActive: boolean; createdAt: string}) => ({
           ...conv,
           createdAt: new Date(conv.createdAt),
           lastMessageAt: conv.lastMessageAt ? new Date(conv.lastMessageAt) : undefined,
@@ -67,7 +67,7 @@ function ChatHistoryContent() {
       const data = await response.json();
       
       if (data.success) {
-        setMessages(data.messages.map((msg: any) => ({
+        setMessages(data.messages.map((msg: {id?: string; role: string; content: string; createdAt?: string}) => ({
           ...msg,
           createdAt: msg.createdAt ? new Date(msg.createdAt) : undefined,
         })));

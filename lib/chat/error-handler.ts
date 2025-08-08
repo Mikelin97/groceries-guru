@@ -83,7 +83,6 @@ export async function withCircuitBreaker<T>(
   const {
     failureThreshold = 5,
     recoveryTimeout = 60000, // 1 minute
-    monitoringWindow = 120000, // 2 minutes
   } = options;
 
   const now = Date.now();

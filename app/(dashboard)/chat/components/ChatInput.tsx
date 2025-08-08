@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { Send, Mic, Camera, Shield, X, FileText, Upload } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,6 @@ interface ChatInputProps {
   onVoiceToggle: () => void;
   onFilesChange: (files: FileList | undefined) => void;
   isRecording: boolean;
-  conversationId?: number | null;
-  sessionId?: string;
 }
 
 export const ChatInput = ({
@@ -27,9 +25,7 @@ export const ChatInput = ({
   onSubmit,
   onVoiceToggle,
   onFilesChange,
-  isRecording,
-  conversationId,
-  sessionId
+  isRecording
 }: ChatInputProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showVoiceInfo, setShowVoiceInfo] = useState(false);

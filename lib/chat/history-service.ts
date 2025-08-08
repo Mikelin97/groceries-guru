@@ -1,6 +1,6 @@
 import { getRedisClient, CHAT_KEYS, CHAT_CONFIG } from '@/lib/db/redis';
 import { db } from '@/lib/db/drizzle';
-import { conversations, messages, NewConversation, NewMessage, Conversation, Message } from '@/lib/db/schema';
+import { conversations, messages, Conversation } from '@/lib/db/schema';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { withRetry, withCircuitBreaker, RetryableError, NonRetryableError, isTransientError } from './error-handler';
@@ -10,9 +10,9 @@ export interface ChatMessage {
   id?: string;
   role: 'user' | 'assistant' | 'system' | 'data';
   content: string;
-  attachments?: any[];
-  toolInvocations?: any[];
-  metadata?: any;
+  attachments?: unknown[];
+  toolInvocations?: unknown[];
+  metadata?: unknown;
   createdAt?: Date;
   conversationId?: number;
   tempId?: string; // For optimistic updates
@@ -34,19 +34,20 @@ export class ChatHistoryService {
   /**
    * Processes attachments and generates fresh S3 URLs for stored files
    */
-  private async processAttachments(attachments: any[] | undefined): Promise<any[] | undefined> {
+  private async processAttachments(attachments: unknown[] | undefined): Promise<unknown[] | undefined> {
     if (!attachments || attachments.length === 0) return attachments;
 
     return await Promise.all(
-      attachments.map(async (attachment) => {
+      attachments.map(async (attachment: unknown) => {
+        const typedAttachment = attachment as {s3Key?: string; uploadStatus?: string; [key: string]: unknown};
         // If attachment has S3 key, generate fresh signed URL
-        if (attachment.s3Key && attachment.uploadStatus === 'completed') {
+        if (typedAttachment.s3Key && typedAttachment.uploadStatus === 'completed') {
           try {
-            console.log('Generating fresh S3 URL for:', attachment.s3Key);
-            const freshUrl = await getSignedUrlForFile(attachment.s3Key, 86400); // 24 hours
+            console.log('Generating fresh S3 URL for:', typedAttachment.s3Key);
+            const freshUrl = await getSignedUrlForFile(typedAttachment.s3Key, 86400); // 24 hours
             
             return {
-              ...attachment,
+              ...typedAttachment,
               url: freshUrl, // Update with fresh signed URL
             };
           } catch (s3Error) {
@@ -54,7 +55,7 @@ export class ChatHistoryService {
             
             // Return attachment with error indication but keep metadata
             return {
-              ...attachment,
+              ...typedAttachment,
               url: null, // Clear expired URL
               s3Error: 'Unable to access file', // Add error indicator
             };
@@ -62,7 +63,7 @@ export class ChatHistoryService {
         }
         
         // Return attachment as-is if no S3 processing needed
-        return attachment;
+        return typedAttachment;
       })
     );
   }
@@ -117,12 +118,14 @@ export class ChatHistoryService {
           const redis = await this.redis;
           
           // Clean attachments - remove URLs for storage, keep S3 keys only
-          const cleanedAttachments = message.attachments?.map(attachment => {
-            if (attachment.s3Key) {
-              const { url, ...attachmentWithoutUrl } = attachment;
+          const cleanedAttachments = message.attachments?.map((attachment: unknown) => {
+            const typedAttachment = attachment as {s3Key?: string; url?: string; [key: string]: unknown};
+            if (typedAttachment.s3Key) {
+              const { url, ...attachmentWithoutUrl } = typedAttachment;
+              void url; // Explicitly indicate we're ignoring this variable
               return attachmentWithoutUrl;
             }
-            return attachment;
+            return typedAttachment;
           });
           
           const tempMessage = {
@@ -228,12 +231,14 @@ export class ChatHistoryService {
         return await withRetry(async () => {
           try {
             // Clean attachments - remove URLs for storage, keep S3 keys only
-            const cleanedAttachments = message.attachments?.map(attachment => {
-              if (attachment.s3Key) {
-                const { url, ...attachmentWithoutUrl } = attachment;
+            const cleanedAttachments = message.attachments?.map((attachment: unknown) => {
+              const typedAttachment = attachment as {s3Key?: string; url?: string; [key: string]: unknown};
+              if (typedAttachment.s3Key) {
+                const { url, ...attachmentWithoutUrl } = typedAttachment;
+              void url; // Explicitly indicate we're ignoring this variable
                 return attachmentWithoutUrl;
               }
-              return attachment;
+              return typedAttachment;
             });
             
             const [dbMessage] = await db.insert(messages)
@@ -423,9 +428,9 @@ export class ChatHistoryService {
     }
   }
 
-  async getUserConversations(userId: number, limit: number = 20): Promise<ConversationSummary[]> {
+  async getUserConversations(_userId: number, limit: number = 20): Promise<ConversationSummary[]> {
     const redis = await this.redis;
-    const cacheKey = CHAT_KEYS.conversationList(userId);
+    const cacheKey = CHAT_KEYS.conversationList(_userId);
 
     try {
       // Try Redis first
@@ -438,7 +443,7 @@ export class ChatHistoryService {
       // Fallback to database
       const dbConversations = await db.select()
         .from(conversations)
-        .where(eq(conversations.userId, userId))
+        .where(eq(conversations.userId, _userId))
         .orderBy(desc(conversations.updatedAt))
         .limit(limit);
 
@@ -470,7 +475,7 @@ export class ChatHistoryService {
       // Final fallback to database only
       const dbConversations = await db.select()
         .from(conversations)
-        .where(eq(conversations.userId, userId))
+        .where(eq(conversations.userId, _userId))
         .orderBy(desc(conversations.updatedAt))
         .limit(limit);
 
@@ -487,8 +492,7 @@ export class ChatHistoryService {
   }
 
   async saveConversationToDatabase(
-    conversationId: number,
-    userId: number
+    conversationId: number
   ): Promise<{ success: boolean; messagesSaved: number; error?: string }> {
     try {
       const redis = await this.redis;
@@ -536,12 +540,14 @@ export class ChatHistoryService {
           }
 
           // Clean attachments - remove URLs for storage, keep S3 keys only
-          const cleanedAttachments = message.attachments?.map(attachment => {
-            if (attachment.s3Key) {
-              const { url, ...attachmentWithoutUrl } = attachment;
+          const cleanedAttachments = message.attachments?.map((attachment: unknown) => {
+            const typedAttachment = attachment as {s3Key?: string; url?: string; [key: string]: unknown};
+            if (typedAttachment.s3Key) {
+              const { url, ...attachmentWithoutUrl } = typedAttachment;
+              void url; // Explicitly indicate we're ignoring this variable
               return attachmentWithoutUrl;
             }
-            return attachment;
+            return typedAttachment;
           });
           
           const [savedMessage] = await db.insert(messages)
@@ -615,16 +621,18 @@ export class ChatHistoryService {
             const { conversationId, message, tempId } = syncData;
 
             // Clean attachments - remove URLs for storage, keep S3 keys only
-            const cleanedAttachments = message.attachments?.map(attachment => {
-              if (attachment.s3Key) {
-                const { url, ...attachmentWithoutUrl } = attachment;
+            const cleanedAttachments = message.attachments?.map((attachment: unknown) => {
+              const typedAttachment = attachment as {s3Key?: string; url?: string; [key: string]: unknown};
+              if (typedAttachment.s3Key) {
+                const { url, ...attachmentWithoutUrl } = typedAttachment;
+              void url; // Explicitly indicate we're ignoring this variable
                 return attachmentWithoutUrl;
               }
-              return attachment;
+              return typedAttachment;
             });
 
             // Insert into database
-            const [dbMessage] = await db.insert(messages)
+            await db.insert(messages)
               .values({
                 conversationId,
                 role: message.role,

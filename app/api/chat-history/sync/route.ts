@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Health check endpoint for sync service
     return NextResponse.json({
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       service: 'chat-history-sync',
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { status: 'unhealthy', error: 'Service check failed' },
       { status: 500 }

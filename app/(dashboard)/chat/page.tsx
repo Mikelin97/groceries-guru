@@ -1,9 +1,9 @@
 'use client';
 
-import { useChat } from '@ai-sdk/react';
+import { useChat, Message } from '@ai-sdk/react';
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ShoppingCart, Clock, Star } from 'lucide-react';
+import { ShoppingCart, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import { ChatHeader } from './components/ChatHeader';
@@ -20,9 +20,8 @@ function ChatContent() {
   const [useSimpleChat, setUseSimpleChat] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [initialMessages, setInitialMessages] = useState<any[]>([]);
+  const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [sessionId] = useState(`session-${Date.now()}-${Math.random().toString(36).substring(2)}`);
   const { t, language } = useLanguage();
   const searchParams = useSearchParams();
 
@@ -53,18 +52,26 @@ function ChatContent() {
       
       if (data.success && data.messages) {
         // Convert the messages to the format expected by useChat
-        const formattedMessages = data.messages.map((msg: any) => ({
+        const formattedMessages = data.messages.map((msg: {
+          id?: string; 
+          tempId?: string; 
+          role: string; 
+          content: string; 
+          createdAt?: string; 
+          attachments?: unknown; 
+          toolInvocations?: unknown;
+        }): Message => ({
           id: msg.id || msg.tempId || `msg-${Date.now()}-${Math.random()}`,
-          role: msg.role,
+          role: msg.role as 'user' | 'assistant' | 'system' | 'data',
           content: msg.content,
           createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-          experimental_attachments: msg.attachments,
-          toolInvocations: msg.toolInvocations,
+          experimental_attachments: msg.attachments ? JSON.parse(JSON.stringify(msg.attachments)) : undefined,
+          toolInvocations: msg.toolInvocations ? JSON.parse(JSON.stringify(msg.toolInvocations)) : undefined,
         }));
         
         console.log(`📥 Loading ${formattedMessages.length} messages for conversation ${convId}`);
         setInitialMessages(formattedMessages);
-        console.log('✅ Initial messages set:', formattedMessages.map((m: any) => ({ id: m.id, role: m.role, content: m.content.substring(0, 30) + '...' })));
+        console.log('✅ Initial messages set:', formattedMessages.map((m: {id: string; role: string; content: string}) => ({ id: m.id, role: m.role, content: m.content.substring(0, 30) + '...' })));
       } else {
         console.log(`No messages found for conversation ${convId}`);
         setInitialMessages([]);
@@ -379,7 +386,7 @@ function ChatContent() {
                   <ShoppingCart className="h-8 w-8 text-gray-400" />
                 </div>
                 <h3 className="font-semibold text-gray-900 mb-2">Conversation Found</h3>
-                <p className="text-gray-500 mb-4">This conversation appears to be empty or the messages couldn't be loaded.</p>
+                <p className="text-gray-500 mb-4">This conversation appears to be empty or the messages could not be loaded.</p>
                 <p className="text-gray-500">You can start chatting to continue this conversation.</p>
               </div>
             ) : null}
@@ -415,14 +422,7 @@ function ChatContent() {
                       <div key={`${message.id}-${index}`} className="mt-3">
                         {attachment.contentType?.startsWith('image/') ? (
                           <div className="relative group">
-                            {attachment.s3Error ? (
-                              <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
-                                <div className="text-red-500 text-sm mb-2">⚠️ Image unavailable</div>
-                                <div className="text-gray-600 text-xs">
-                                  {attachment.name || 'Image'} • {attachment.s3Error}
-                                </div>
-                              </div>
-                            ) : attachment.url ? (
+                            {attachment.url ? (
                               <div className="max-w-sm">
                                 <Image
                                   src={attachment.url}
@@ -434,9 +434,6 @@ function ChatContent() {
                                 />
                                 <div className="text-xs text-gray-500 mt-1 px-1">
                                   {attachment.name}
-                                  {attachment.uploadStatus === 'failed' && (
-                                    <span className="text-red-500 ml-2">• Upload failed</span>
-                                  )}
                                 </div>
                               </div>
                             ) : (
@@ -447,12 +444,7 @@ function ChatContent() {
                           </div>
                         ) : attachment.contentType?.startsWith('application/pdf') ? (
                           <div className={`${message.role === 'user' ? 'bg-white/10 backdrop-blur' : 'bg-gray-50 border border-gray-200'} rounded-lg p-3 max-w-sm`}>
-                            {attachment.s3Error ? (
-                              <div className="text-center">
-                                <div className="text-red-500 text-sm mb-1">⚠️ PDF unavailable</div>
-                                <div className="text-gray-600 text-xs">{attachment.s3Error}</div>
-                              </div>
-                            ) : attachment.url ? (
+                            {attachment.url ? (
                               <div className="flex items-center gap-2">
                                 <div className="flex-shrink-0">
                                   <div className="w-10 h-10 rounded bg-red-100 flex items-center justify-center">
@@ -483,9 +475,6 @@ function ChatContent() {
                           <div className={`${message.role === 'user' ? 'bg-white/10 backdrop-blur' : 'bg-gray-50 border border-gray-200'} rounded-lg p-3 max-w-sm`}>
                             <div className="text-sm">
                               📎 {attachment.name || 'Unknown file'}
-                              {attachment.uploadStatus === 'failed' && (
-                                <span className="text-red-500 ml-2">• Upload failed</span>
-                              )}
                             </div>
                           </div>
                         )}
@@ -539,8 +528,6 @@ function ChatContent() {
             onVoiceToggle={handleVoiceToggle}
             onFilesChange={setFiles}
             isRecording={isRecording}
-            conversationId={conversationId}
-            sessionId={sessionId}
           />
         </div>
       </div>

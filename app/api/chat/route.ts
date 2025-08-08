@@ -63,7 +63,7 @@ export async function POST(req: Request) {
                   });
 
                   // Upload to S3 with retry logic
-                  const uploadResult = await uploadFileToS3(file, user.id, conversationId);
+                  const uploadResult = await uploadFileToS3(file, String(user.id), conversationId);
                   
                   console.log('File uploaded to S3:', uploadResult.key);
                   

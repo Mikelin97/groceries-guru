@@ -112,8 +112,7 @@ export async function POST(request: NextRequest) {
       case 'save_to_database': {
         const { conversationId } = data;
         const result = await chatHistoryService.saveConversationToDatabase(
-          conversationId,
-          user.id
+          conversationId
         );
 
         return NextResponse.json({
