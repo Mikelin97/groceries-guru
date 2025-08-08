@@ -22,6 +22,7 @@ function ChatContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [sessionId] = useState(`session-${Date.now()}-${Math.random().toString(36).substring(2)}`);
   const { t, language } = useLanguage();
   const searchParams = useSearchParams();
 
@@ -528,6 +529,8 @@ function ChatContent() {
             onVoiceToggle={handleVoiceToggle}
             onFilesChange={setFiles}
             isRecording={isRecording}
+            conversationId={conversationId}
+            sessionId={sessionId}
           />
         </div>
       </div>

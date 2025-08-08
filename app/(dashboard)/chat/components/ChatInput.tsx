@@ -14,6 +14,8 @@ interface ChatInputProps {
   onVoiceToggle: () => void;
   onFilesChange: (files: FileList | undefined) => void;
   isRecording: boolean;
+  conversationId?: number | null;
+  sessionId?: string;
 }
 
 export const ChatInput = ({
@@ -25,6 +27,8 @@ export const ChatInput = ({
   onSubmit,
   onVoiceToggle,
   onFilesChange,
+  conversationId,
+  sessionId,
   isRecording
 }: ChatInputProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
