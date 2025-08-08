@@ -1,4 +1,4 @@
-import { ShoppingCart, User, LogOut } from 'lucide-react';
+import { ShoppingCart, User, LogOut, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useLanguage } from '@/app/contexts/LanguageContext';
@@ -7,9 +7,12 @@ import { LanguageToggle } from '@/components/ui/language-toggle';
 interface ChatHeaderProps {
   showDebug: boolean;
   onToggleDebug: () => void;
+  onSaveChat?: () => void;
+  isSaving?: boolean;
+  conversationId?: number | null;
 }
 
-export const ChatHeader = ({ showDebug, onToggleDebug }: ChatHeaderProps) => {
+export const ChatHeader = ({ showDebug, onToggleDebug, onSaveChat, isSaving, conversationId }: ChatHeaderProps) => {
   const { user, signOut } = useAuth();
   const { t } = useLanguage();
 
@@ -22,7 +25,14 @@ export const ChatHeader = ({ showDebug, onToggleDebug }: ChatHeaderProps) => {
               <ShoppingCart className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="font-semibold text-gray-900">{t('app.title')}</h1>
+              <h1 className="font-semibold text-gray-900">
+                {t('app.title')}
+                {conversationId && (
+                  <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                    Conversation #{conversationId}
+                  </span>
+                )}
+              </h1>
               <p className="text-sm text-gray-500">{t('app.subtitle')}</p>
             </div>
           </div>
@@ -50,6 +60,20 @@ export const ChatHeader = ({ showDebug, onToggleDebug }: ChatHeaderProps) => {
             )}
             
             <LanguageToggle />
+            
+            {conversationId && onSaveChat && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSaveChat}
+                disabled={isSaving}
+                className="text-xs flex items-center gap-1"
+                title="Save conversation to database"
+              >
+                <Save className="h-3 w-3" />
+                {isSaving ? 'Saving...' : 'Save Chat'}
+              </Button>
+            )}
             
             <Button
               variant="outline"

@@ -5,9 +5,14 @@ import { z } from 'zod';
 import { anthropic } from '@ai-sdk/anthropic';
 import { webSearch } from '@/lib/ai/web-search';
 import { findRelevantContent } from '@/lib/ai/embedding';
+import { ChatHistoryService } from '@/lib/chat/history-service';
+import { getUser } from '@/lib/db/queries';
+import { uploadFileToS3 } from '@/lib/storage/s3-service';
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
+
+const chatHistoryService = new ChatHistoryService();
 
 // Simple language detection based on Chinese characters
 function detectLanguageFromMessages(messages: Message[]): string {
@@ -24,20 +29,122 @@ export async function POST(req: Request) {
     console.log('Chat API: Received request');
     const body = await req.json();
     console.log('Full request body:', JSON.stringify(body, null, 2));
-    const { messages, language }: { messages: Message[]; language?: string } = body;
+    const { messages, language, conversationId }: { 
+      messages: Message[]; 
+      language?: string;
+      conversationId?: number;
+    } = body;
     console.log('Chat API: Messages received:', messages.length);
     console.log('Chat API: Language preference:', language);
+    console.log('Chat API: Conversation ID:', conversationId);
+
+    // Get authenticated user
+    const user = await getUser();
+    if (!user) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    // Process file attachments - upload to S3 and update message URLs
+    const processedMessages = await Promise.all(
+      messages.map(async (message) => {
+        if (message.experimental_attachments && message.experimental_attachments.length > 0) {
+          const processedAttachments = await Promise.all(
+            message.experimental_attachments.map(async (attachment) => {
+              // If attachment has data URL, convert to File and upload to S3
+              if (attachment.url && attachment.url.startsWith('data:')) {
+                try {
+                  console.log('Processing attachment:', attachment.name, attachment.contentType);
+                  
+                  // Convert data URL to File
+                  const response = await fetch(attachment.url);
+                  const blob = await response.blob();
+                  const file = new File([blob], attachment.name || `attachment-${Date.now()}`, {
+                    type: attachment.contentType || blob.type
+                  });
+
+                  // Upload to S3 with retry logic
+                  const uploadResult = await uploadFileToS3(file, String(user.id), conversationId);
+                  
+                  console.log('File uploaded to S3:', uploadResult.key);
+                  
+                  // Return updated attachment with minimal S3 metadata (no sensitive info)
+                  return {
+                    ...attachment,
+                    url: uploadResult.url, // Signed URL for immediate AI processing only
+                    s3Key: uploadResult.key, // Only store the S3 key - URL generated at runtime
+                    uploadStatus: 'completed',
+                    uploadedAt: new Date().toISOString(),
+                  };
+                } catch (uploadError) {
+                  console.error('Failed to upload attachment:', uploadError);
+                  
+                  // Return attachment with error status - still allow chat to continue
+                  return {
+                    ...attachment,
+                    uploadStatus: 'failed',
+                    errorMessage: uploadError instanceof Error ? uploadError.message : 'Upload failed',
+                    // Keep original data URL as fallback
+                  };
+                }
+              }
+              // For attachments that already have S3 URLs or other URLs
+              return attachment;
+            })
+          );
+
+          return {
+            ...message,
+            experimental_attachments: processedAttachments
+          };
+        }
+        return message;
+      })
+    );
 
   // check if user has sent a PDF
-  const messagesHavePDF = messages.some(message =>
+  const messagesHavePDF = processedMessages.some(message =>
     message.experimental_attachments?.some(
       a => a.contentType === 'application/pdf',
     ),
   );
 
   // Detect language from messages if not provided
-  const detectedLanguage = language || detectLanguageFromMessages(messages);
+  const detectedLanguage = language || detectLanguageFromMessages(processedMessages);
   console.log('Chat API: Using language:', detectedLanguage);
+
+  // Handle conversation persistence
+  let currentConversationId = conversationId;
+  
+  // If no conversation ID provided and we have messages, create a new conversation
+  if (!currentConversationId && messages.length > 0) {
+    try {
+      const conversation = await chatHistoryService.createConversation(
+        user.id,
+        undefined, // teamId - can be added later for team features
+        detectedLanguage
+      );
+      currentConversationId = conversation.id;
+      console.log('Created new conversation:', currentConversationId);
+    } catch (error) {
+      console.error('Failed to create conversation:', error);
+      // Continue without persistence rather than failing the chat
+    }
+  }
+
+  // Store user message to Redis only during chat
+  const lastUserMessage = processedMessages.filter(m => m.role === 'user').pop();
+  if (currentConversationId && lastUserMessage) {
+    try {
+      await chatHistoryService.addMessageToRedis(currentConversationId, {
+        role: lastUserMessage.role,
+        content: lastUserMessage.content,
+        attachments: lastUserMessage.experimental_attachments,
+        metadata: { timestamp: new Date() }
+      });
+    } catch (error) {
+      console.error('Failed to store user message to Redis:', error);
+    }
+  }
 
   const result = streamText({
     model: messagesHavePDF
@@ -90,7 +197,7 @@ export async function POST(req: Request) {
     - Be transparent about your limitations and always prioritize user safety
 
     Remember: You're here to make grocery shopping easier and more informed for every user!`,
-    messages,
+      messages: processedMessages,
     tools: {
       webSearch: tool({
         description: `Search the web for current grocery product information, prices, availability, recalls, or new product launches. Use this for up-to-date information not in your knowledge base.`,
@@ -107,10 +214,37 @@ export async function POST(req: Request) {
         execute: async ({ question }) => findRelevantContent(question),
       }),
     },
+    onFinish: async (result) => {
+      // Store assistant's response to Redis only during chat
+      if (currentConversationId && result.text) {
+        try {
+          await chatHistoryService.addMessageToRedis(currentConversationId, {
+            role: 'assistant',
+            content: result.text,
+            toolInvocations: result.toolCalls,
+            metadata: { 
+              timestamp: new Date(),
+              usage: result.usage,
+              finishReason: result.finishReason
+            }
+          });
+          console.log('Stored assistant response to Redis for conversation:', currentConversationId);
+        } catch (error) {
+          console.error('Failed to store assistant response to Redis:', error);
+        }
+      }
+    }
   });
 
     console.log('Chat API: Streaming response started');
-    return result.toDataStreamResponse();
+    
+    // Add conversation ID to the response headers for client tracking
+    const response = result.toDataStreamResponse();
+    if (currentConversationId) {
+      response.headers.set('X-Conversation-Id', currentConversationId.toString());
+    }
+    
+    return response;
   } catch (error) {
     console.error('Chat API Error:', error);
     return new Response(

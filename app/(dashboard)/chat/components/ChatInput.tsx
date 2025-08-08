@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Send, Mic, Camera, Shield } from 'lucide-react';
+import { Send, Mic, Camera, Shield, X, FileText, Upload } from 'lucide-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 
@@ -41,10 +42,55 @@ export const ChatInput = ({
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      onFilesChange(event.target.files);
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files.length > 0) {
+      // Validate files before accepting them
+      const validFiles = Array.from(event.target.files).filter(file => {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        
+        if (!allowedTypes.includes(file.type)) {
+          alert(`File type ${file.type} is not supported. Only images and PDFs are allowed.`);
+          return false;
+        }
+        
+        if (file.size > maxSize) {
+          alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+          return false;
+        }
+        
+        return true;
+      });
+      
+      if (validFiles.length > 0) {
+        // Create FileList from valid files
+        const dataTransfer = new DataTransfer();
+        validFiles.forEach(file => dataTransfer.items.add(file));
+        onFilesChange(dataTransfer.files);
+      } else {
+        onFilesChange(undefined);
+      }
     }
+  };
+
+  const removeFile = (index: number) => {
+    if (files && files.length > 1) {
+      const dataTransfer = new DataTransfer();
+      Array.from(files).forEach((file, i) => {
+        if (i !== index) dataTransfer.items.add(file);
+      });
+      onFilesChange(dataTransfer.files);
+    } else {
+      onFilesChange(undefined);
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
@@ -83,14 +129,56 @@ export const ChatInput = ({
             </div>
           )}
           
-          {/* File preview */}
+          {/* Enhanced File preview */}
           {files && files.length > 0 && (
-            <div className="absolute bottom-full mb-2 flex gap-2">
-              {Array.from(files).map((file, index) => (
-                <div key={index} className="bg-orange-50 text-orange-600 text-xs px-2 py-1 rounded">
-                  📎 {file.name}
-                </div>
-              ))}
+            <div className="absolute bottom-full mb-2 flex flex-wrap gap-2 max-w-lg">
+              {Array.from(files).map((file, index) => {
+                const isImage = file.type.startsWith('image/');
+                const isPDF = file.type === 'application/pdf';
+                
+                return (
+                  <div key={index} className="bg-white border border-gray-200 rounded-lg p-2 shadow-sm relative group max-w-xs">
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    
+                    <div className="flex items-center gap-2">
+                      {isImage ? (
+                        <div className="w-12 h-12 rounded overflow-hidden bg-gray-100 flex-shrink-0">
+                          <Image
+                            src={URL.createObjectURL(file)}
+                            alt={file.name}
+                            width={48}
+                            height={48}
+                            className="object-cover w-full h-full"
+                          />
+                        </div>
+                      ) : isPDF ? (
+                        <div className="w-12 h-12 rounded bg-red-50 flex items-center justify-center flex-shrink-0">
+                          <FileText className="h-6 w-6 text-red-500" />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded bg-gray-50 flex items-center justify-center flex-shrink-0">
+                          <Upload className="h-6 w-6 text-gray-500" />
+                        </div>
+                      )}
+                      
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm text-gray-900 truncate" title={file.name}>
+                          {file.name}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {formatFileSize(file.size)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
