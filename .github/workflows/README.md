@@ -27,8 +27,17 @@ To enable automated deployment, you need to configure the following secrets in y
   1. Builds Docker image
   2. Pushes to AWS ECR
   3. Updates ECS task definition
-  4. Deploys to ECS service
-  5. Waits for deployment completion
+  4. **Runs database migrations** (as separate ECS task)
+  5. Deploys to ECS service
+  6. Waits for deployment completion
+
+### Database Migration Process
+The workflow includes an automated database migration step that:
+- Creates a temporary ECS task definition for migrations
+- Runs `npm run db:migrate:run` in a separate container
+- Waits for migration completion before proceeding
+- Fails the deployment if migrations fail
+- Provides detailed logs for debugging migration issues
 
 ## AWS Resources Used
 - **ECR Repository**: groceries-guru

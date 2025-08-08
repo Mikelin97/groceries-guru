@@ -11,3 +11,6 @@ if (!process.env.POSTGRES_URL) {
 
 export const client = postgres(process.env.POSTGRES_URL);
 export const db = drizzle(client, { schema });
+
+// Note: Migrations are now handled via separate ECS task during deployment
+// See: npm run db:migrate and aws/deploy.sh

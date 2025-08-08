@@ -96,6 +96,78 @@ jobs:
         container-name: ${{ env.CONTAINER_NAME }}
         image: ${{ steps.build-image.outputs.image }}
 
+    - name: Run database migrations
+      env:
+        IMAGE_URI: ${{ steps.build-image.outputs.image }}
+      run: |
+        echo "🗄️ Running database migrations..."
+        
+        # Create a temporary task definition for migrations
+        MIGRATION_TASK_DEF=$(cat task-definition.json | jq --arg IMAGE "$IMAGE_URI" '
+          .containerDefinitions[0].image = $IMAGE |
+          .containerDefinitions[0].command = ["npm", "run", "db:migrate:run"] |
+          .family = "groceries-guru-migration"
+        ')
+        
+        # Register the migration task definition
+        echo "$MIGRATION_TASK_DEF" > migration-task-definition.json
+        aws ecs register-task-definition \
+          --cli-input-json file://migration-task-definition.json \
+          --region ${{ env.AWS_REGION }}
+        
+        # Run the migration task
+        echo "Starting migration task..."
+        TASK_ARN=$(aws ecs run-task \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --task-definition groceries-guru-migration \
+          --query 'tasks[0].taskArn' \
+          --output text \
+          --region ${{ env.AWS_REGION }})
+        
+        echo "Migration task ARN: $TASK_ARN"
+        
+        # Wait for migration task to complete
+        echo "⏳ Waiting for migration to complete..."
+        aws ecs wait tasks-stopped \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --tasks $TASK_ARN \
+          --region ${{ env.AWS_REGION }}
+        
+        # Check migration exit code
+        EXIT_CODE=$(aws ecs describe-tasks \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --tasks $TASK_ARN \
+          --query 'tasks[0].containers[0].exitCode' \
+          --output text \
+          --region ${{ env.AWS_REGION }})
+        
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "❌ Migration failed with exit code: $EXIT_CODE"
+          
+          # Get migration logs for debugging
+          echo "📋 Migration logs:"
+          LOG_STREAM=$(aws logs describe-log-streams \
+            --log-group-name "/ecs/groceries-guru" \
+            --order-by LastEventTime \
+            --descending \
+            --query 'logStreams[0].logStreamName' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          if [ "$LOG_STREAM" != "None" ]; then
+            aws logs get-log-events \
+              --log-group-name "/ecs/groceries-guru" \
+              --log-stream-name "$LOG_STREAM" \
+              --query 'events[].message' \
+              --output text \
+              --region ${{ env.AWS_REGION }}
+          fi
+          
+          exit 1
+        fi
+        
+        echo "✅ Database migrations completed successfully!"
+
     - name: Deploy Amazon ECS task definition
       uses: aws-actions/amazon-ecs-deploy-task-definition@v1
       with:

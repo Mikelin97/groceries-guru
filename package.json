@@ -11,6 +11,7 @@
     "db:seed": "npx tsx lib/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:run": "npx tsx lib/db/migrate-runner.ts",
     "db:studio": "drizzle-kit studio",
     "test:ai": "npx tsx test-ai.ts",
     "test:lint": "next lint",
